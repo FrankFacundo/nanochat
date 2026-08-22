@@ -9,6 +9,7 @@ from pathlib import Path
 
 from llm_lab.catalog import CATALOG_PATH, Catalog
 from llm_lab.dashboard import serve
+from llm_lab.learning import learning_snapshot
 from llm_lab.report import compare_runs, grade_progress
 from llm_lab.runner import ExperimentError, default_runs_dir, list_runs, run_experiment
 
@@ -54,14 +55,17 @@ def _build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--output", type=Path)
     compare_parser.set_defaults(func=_compare)
 
-    dashboard_parser = subparsers.add_parser("dashboard", help="start the interactive local comparison dashboard")
+    dashboard_parser = subparsers.add_parser("dashboard", help="start the adaptive learning and experiment dashboard")
     dashboard_parser.add_argument("--host", default="127.0.0.1")
     dashboard_parser.add_argument("--port", type=int, default=8765)
     dashboard_parser.add_argument("--open", action="store_true", dest="open_browser")
     dashboard_parser.set_defaults(func=_dashboard)
 
-    grade_parser = subparsers.add_parser("grade", help="run the formative completion audit")
+    grade_parser = subparsers.add_parser("grade", help="show the LLM-assessed course grade and mastery")
     grade_parser.set_defaults(func=_grade)
+
+    audit_parser = subparsers.add_parser("audit", help="run the non-semantic completion checklist")
+    audit_parser.set_defaults(func=_audit)
     return parser
 
 
@@ -125,7 +129,26 @@ def _dashboard(args: argparse.Namespace) -> None:
 
 
 def _grade(args: argparse.Namespace) -> None:
+    snapshot = learning_snapshot()
+    stats = snapshot["stats"]
+    print(f"LLM-assessed course grade: {stats['overall_grade']}/100")
+    print(
+        f"Mastery: {stats['overall_mastery']}% · "
+        f"{stats['passed_activities']}/{stats['total_activities']} activities passed · "
+        f"{stats['mastered_skills']}/{stats['total_skills']} skills mastered"
+    )
+    if not stats["attempts"]:
+        print("No LLM assessments yet. Start the dashboard and submit the first challenge.")
+    for week in snapshot["weeks"]:
+        print(
+            f"- Week {week['id']} {week['short_title']}: "
+            f"grade {week['grade']}/100, mastery {week['mastery']}%, "
+            f"{week['passed']}/{week['total']} passed"
+        )
+
+
+def _audit(args: argparse.Namespace) -> None:
     score, notes = grade_progress(COURSE_DIR)
-    print(f"Formative completion score: {score}/100")
+    print(f"Completion checklist: {score}/100 (not a substantive grade)")
     for note in notes:
         print(f"- {note}")

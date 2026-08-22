@@ -1,0 +1,337 @@
+{
+  "version": 1,
+  "title": "Nanochat Mastery Lab",
+  "mastery_threshold": 0.85,
+  "pass_score": 85,
+  "week_weights": {
+    "0": 10,
+    "1": 15,
+    "2": 30,
+    "3": 10,
+    "4": 10,
+    "5": 10,
+    "6": 15
+  },
+  "weeks": [
+    {"id": 0, "title": "Experimental method", "short_title": "Method"},
+    {"id": 1, "title": "Tokenization & pretraining", "short_title": "Pretraining"},
+    {"id": 2, "title": "Optimization & architecture", "short_title": "Ablations"},
+    {"id": 3, "title": "Supervised fine-tuning", "short_title": "SFT"},
+    {"id": 4, "title": "Direct preference optimization", "short_title": "DPO"},
+    {"id": 5, "title": "Verifiable-reward RL", "short_title": "RL"},
+    {"id": 6, "title": "M3 Max Parameter Golf", "short_title": "Capstone"}
+  ],
+  "skills": [
+    {"id": "method.hypothesis", "week": 0, "title": "Hypotheses & falsifiers", "description": "Make testable predictions and define observations that would reject the proposed mechanism."},
+    {"id": "method.controls", "week": 0, "title": "Controls & confounds", "description": "Separate independent variables, controls, nuisance variables, and hidden joint interventions."},
+    {"id": "method.reproducibility", "week": 0, "title": "Reproducibility", "description": "Preserve commands, provenance, environments, metrics, failure rules, and immutable artifacts."},
+    {"id": "pretrain.tokenization", "week": 1, "title": "BPE & BPB", "description": "Reason from bytes through BPE to token loss and compare tokenizers with valid normalization."},
+    {"id": "pretrain.accounting", "week": 1, "title": "Tensor & compute accounting", "description": "Trace shapes and calculate parameters, tokens, and approximate FLOPs."},
+    {"id": "pretrain.dynamics", "week": 1, "title": "Learning dynamics", "description": "Diagnose warmup, schedules, curve gaps, throughput drift, underfitting, and overfitting."},
+    {"id": "ablation.optimization", "week": 2, "title": "Optimization interventions", "description": "Interpret learning rate, batch, schedule, decay, clipping, and optimizer comparisons."},
+    {"id": "ablation.compute", "week": 2, "title": "Compute-matched comparison", "description": "Distinguish fixed steps, tokens, FLOPs, parameters, and wall time."},
+    {"id": "ablation.implementation", "week": 2, "title": "Implementation contracts", "description": "Add controlled switches with tests, metadata, accounting, and baseline compatibility."},
+    {"id": "ablation.inference", "week": 2, "title": "Causal experimental inference", "description": "Use effect sizes, confirmation, negative results, uncertainty, and decisive follow-ups."},
+    {"id": "sft.objective", "week": 3, "title": "SFT objective & data", "description": "Understand serialization, response-only masks, packing, optimizer state, and data mixtures."},
+    {"id": "sft.evaluation", "week": 3, "title": "Capability & forgetting", "description": "Measure instruction gains and retained base capability with frozen evaluations."},
+    {"id": "dpo.objective", "week": 4, "title": "DPO derivation", "description": "Derive response log-ratio learning against a frozen reference and explain beta and length bias."},
+    {"id": "dpo.validation", "week": 4, "title": "DPO verification", "description": "Hand-check the loss, test gradient behavior, audit preferences, and measure drift."},
+    {"id": "rl.objective", "week": 5, "title": "Policy-gradient objective", "description": "Trace on-policy rollouts, group baselines, masked log probabilities, and update behavior."},
+    {"id": "rl.evaluation", "week": 5, "title": "RL evaluation & reward hacking", "description": "Jointly analyze reward, pass@k, length, variance, cost, and verifier exploits."},
+    {"id": "capstone.protocol", "week": 6, "title": "Frozen capstone protocol", "description": "Run a fair compute-constrained search with sealed evaluation and exact reproduction."},
+    {"id": "communication.claims", "week": 6, "title": "Calibrated scientific claims", "description": "Connect claims to evidence, uncertainty, limitations, and negative results."}
+  ],
+  "activities": [
+    {
+      "id": "w0-method-defense",
+      "week": 0,
+      "kind": "Concept defense",
+      "title": "Defend a controlled experiment",
+      "summary": "Establish the language and logic used by every later experiment.",
+      "prompt": "Answer as if defending your protocol without notes. For a learning-rate ablation: define the independent variable, dependent variable, controls, nuisance variables, and one plausible confound. Then explain what a smoke run can and cannot prove, give a quantitative falsifier, and say when fixed steps, tokens, FLOPs, or wall time is the right comparison budget.",
+      "estimated_minutes": 18,
+      "skills": ["method.hypothesis", "method.controls"],
+      "prerequisites": [],
+      "assignment_path": "llm_lab/assignments/week-00-method.md",
+      "suggested_evidence": ["llm_lab/student/predictions.json"],
+      "rubric": [
+        {"id": "definitions", "label": "Experimental definitions", "points": 25, "requirement": "Correctly distinguishes intervention, outcome, controls, nuisance variables, and confounds."},
+        {"id": "falsifiability", "label": "Falsifiability", "points": 25, "requirement": "States a measurable, budgeted result that would reject the proposed mechanism."},
+        {"id": "evidence_levels", "label": "Evidence levels", "points": 25, "requirement": "Separates smoke, pilot, and confirmatory evidence without overclaiming."},
+        {"id": "budget_choice", "label": "Comparison budget", "points": 25, "requirement": "Chooses among fixed steps, tokens, FLOPs, and wall time based on the claim."}
+      ]
+    },
+    {
+      "id": "w0-artifact-audit",
+      "week": 0,
+      "kind": "Artifact review",
+      "title": "Audit a run and freeze the protocol",
+      "summary": "Use real run evidence to prove the laboratory loop is trustworthy.",
+      "prompt": "Attach the w0-smoke run and your protocol. Identify which artifact is immutable provenance, which files are derived convenience, what information would be lost by retaining only final validation BPB, and three invalid comparisons (measurement, control, and selection failures). End with a measurable divergence rule and test-set policy.",
+      "estimated_minutes": 25,
+      "skills": ["method.controls", "method.reproducibility"],
+      "prerequisites": ["w0-method-defense"],
+      "assignment_path": "llm_lab/assignments/week-00-method.md",
+      "suggested_evidence": ["llm_lab/student/predictions.json"],
+      "suggested_run_prefixes": ["w0-smoke"],
+      "rubric": [
+        {"id": "artifact_audit", "label": "Artifact audit", "points": 30, "requirement": "Accurately uses manifest, log, metrics, summary, and workspace evidence."},
+        {"id": "protocol", "label": "Frozen protocol", "points": 30, "requirement": "Defines machine conditions, naming, interruption, divergence, and evaluation rules."},
+        {"id": "invalid_comparisons", "label": "Invalid comparisons", "points": 25, "requirement": "Explains measurement, control, and selection failures with convincing mechanisms."},
+        {"id": "reproducibility", "label": "Reproducibility", "points": 15, "requirement": "Another researcher could recover the exact run and intended comparison."}
+      ]
+    },
+    {
+      "id": "w1-tokenizer-defense",
+      "week": 1,
+      "kind": "Concept + calculation",
+      "title": "Reason from bytes to BPB",
+      "summary": "Prove that tokenizer comparisons and capacity accounting are valid.",
+      "prompt": "Explain how BPE starts and learns merges, derive bits-per-byte from total response NLL in nats and non-special bytes, and explain why cross-tokenizer perplexity is invalid. For the d6 model, identify every parameter category that changes with vocabulary and show how a larger vocabulary can reduce tokens per document while increasing capacity and compute. Include one concrete fair follow-up beyond a 600-step token-matched pilot.",
+      "estimated_minutes": 25,
+      "skills": ["pretrain.tokenization", "pretrain.accounting"],
+      "prerequisites": ["w0-artifact-audit"],
+      "assignment_path": "llm_lab/assignments/week-01-pretraining.md",
+      "suggested_evidence": ["llm_lab/student/tokenizer-report.md"],
+      "suggested_run_prefixes": ["w1-vocab-8192", "w1-vocab-16384", "w1-vocab-32768"],
+      "rubric": [
+        {"id": "bpe", "label": "BPE mechanism", "points": 20, "requirement": "Correctly explains starting symbols, merges, segmentation, and vocabulary tradeoffs."},
+        {"id": "bpb", "label": "BPB derivation", "points": 30, "requirement": "Derives the correct normalization and rejects incomparable tokenizer perplexities."},
+        {"id": "accounting", "label": "Capacity accounting", "points": 25, "requirement": "Identifies all vocabulary-dependent tensors and relevant compute consequences."},
+        {"id": "fair_test", "label": "Fair comparison", "points": 25, "requirement": "Designs a byte- or FLOP-aware confirmation and calibrates the conclusion."}
+      ]
+    },
+    {
+      "id": "w1-baseline-diagnosis",
+      "week": 1,
+      "kind": "Run diagnosis",
+      "title": "Diagnose the pretraining baseline",
+      "summary": "Turn curves, throughput, and samples into a defensible model diagnosis.",
+      "prompt": "Attach your w1-baseline run and model card. Trace the key tensor shapes through one batch, reconcile the parameter/token calculation with the run, and diagnose warmup, plateau, warmdown, train-versus-validation movement, throughput drift, and sample evolution. Decide whether the evidence supports underfitting, overfitting, instability, or none of these, and name the cheapest falsifying follow-up.",
+      "estimated_minutes": 35,
+      "skills": ["pretrain.accounting", "pretrain.dynamics", "method.reproducibility"],
+      "prerequisites": ["w1-tokenizer-defense"],
+      "assignment_path": "llm_lab/assignments/week-01-pretraining.md",
+      "suggested_evidence": ["llm_lab/student/model-card.md"],
+      "suggested_run_prefixes": ["w1-baseline"],
+      "rubric": [
+        {"id": "shapes", "label": "Shapes & accounting", "points": 25, "requirement": "Correctly traces tensors and reconciles parameters, tokens, and approximate FLOPs."},
+        {"id": "curves", "label": "Curve diagnosis", "points": 30, "requirement": "Uses the actual learning curves and schedule regions rather than final metrics alone."},
+        {"id": "evidence", "label": "Run evidence", "points": 25, "requirement": "Connects claims to immutable execution IDs, metrics, throughput, and examples."},
+        {"id": "calibration", "label": "Calibrated conclusion", "points": 20, "requirement": "Separates observation from inference and proposes a decisive follow-up."}
+      ]
+    },
+    {
+      "id": "w2-control-design",
+      "week": 2,
+      "kind": "Experimental design",
+      "title": "Untangle a joint intervention",
+      "summary": "Design comparisons that isolate mechanism rather than merely rank configurations.",
+      "prompt": "Choose one optimization family and one scaling/architecture family from Week 2. For each, state the causal question, mechanism, prediction, falsifier, independent variable, hidden joint interventions, and correct budget axes. You must address nanochat's automatic batch/LR coupling and explain why fixed-step depth, width, head, or context results are not automatically compute matched.",
+      "estimated_minutes": 30,
+      "skills": ["ablation.optimization", "ablation.compute", "method.controls"],
+      "prerequisites": ["w1-baseline-diagnosis"],
+      "assignment_path": "llm_lab/assignments/week-02-ablations.md",
+      "suggested_evidence": ["llm_lab/student/predictions.json", "llm_lab/student/ablation-plan.md"],
+      "rubric": [
+        {"id": "causal_question", "label": "Causal question", "points": 25, "requirement": "Defines one-variable questions and mechanisms rather than winner searches."},
+        {"id": "joint_interventions", "label": "Joint interventions", "points": 30, "requirement": "Finds batch/LR and architecture/compute couplings specific to nanochat."},
+        {"id": "budgets", "label": "Budget axes", "points": 25, "requirement": "Uses steps, tokens, FLOPs, parameters, and wall time according to the claim."},
+        {"id": "falsifier", "label": "Confirmation plan", "points": 20, "requirement": "Freezes falsifiers, meaningful effects, and matched confirmatory runs."}
+      ]
+    },
+    {
+      "id": "w2-implementation-review",
+      "week": 2,
+      "kind": "Code review",
+      "title": "Prove an implementation contract",
+      "summary": "Demonstrate that a new architecture or optimization switch changes only what it claims.",
+      "prompt": "Attach the implementation and tests for one starred Week 2 contract. Explain the baseline-preserving default, checkpoint metadata, parameter/FLOP accounting, optimizer coverage, and the unit test written before training. Show the w0-smoke compatibility evidence. If the intervention changes capacity (for example SwiGLU or tied weights), distinguish raw from parameter-matched comparisons.",
+      "estimated_minutes": 35,
+      "skills": ["ablation.implementation", "ablation.compute", "method.reproducibility"],
+      "prerequisites": ["w2-control-design"],
+      "assignment_path": "llm_lab/assignments/week-02-ablations.md",
+      "suggested_evidence": ["nanochat/gpt.py", "nanochat/optim.py", "tests"],
+      "suggested_run_prefixes": ["w0-smoke"],
+      "rubric": [
+        {"id": "correctness", "label": "Implementation correctness", "points": 30, "requirement": "The switch implements the intended mechanism without accidental changes."},
+        {"id": "tests", "label": "Independent tests", "points": 30, "requirement": "Tests cover invariants, gradients/optimizer ownership, and the new behavior."},
+        {"id": "compatibility", "label": "Baseline compatibility", "points": 20, "requirement": "Defaults, checkpoints, metrics, and the smoke run remain compatible."},
+        {"id": "accounting", "label": "Fair accounting", "points": 20, "requirement": "Parameter and FLOP changes are measured and reflected in comparison claims."}
+      ]
+    },
+    {
+      "id": "w2-portfolio-defense",
+      "week": 2,
+      "kind": "Portfolio defense",
+      "title": "Defend an ablation portfolio",
+      "summary": "Convert many pilots into a small number of calibrated, confirmed conclusions.",
+      "prompt": "Attach your ablation portfolio and representative run IDs. Defend at least one positive, one null or negative, and one surprising result. For each: give the effect size, resource cost, confounds, strength label, and cheapest decisive follow-up. Explain why confirming only the pilot winner is biased and show how at least one claimed effect survives a larger-budget control/intervention pair.",
+      "estimated_minutes": 45,
+      "skills": ["ablation.optimization", "ablation.compute", "ablation.inference", "communication.claims"],
+      "prerequisites": ["w2-implementation-review"],
+      "assignment_path": "llm_lab/assignments/week-02-ablations.md",
+      "suggested_evidence": ["llm_lab/student/ablation-portfolio.md", "llm_lab/student/conclusions.json"],
+      "rubric": [
+        {"id": "coverage", "label": "Controlled coverage", "points": 25, "requirement": "Representative experiments use correct controls and resource accounting."},
+        {"id": "confirmation", "label": "Confirmation discipline", "points": 30, "requirement": "Control and intervention are confirmed together under a frozen larger budget."},
+        {"id": "negative_results", "label": "Negative evidence", "points": 20, "requirement": "Null, negative, and surprising results are retained and interpreted honestly."},
+        {"id": "claims", "label": "Calibrated claims", "points": 25, "requirement": "Effect sizes, uncertainty, confounds, and follow-ups bound every conclusion."}
+      ]
+    },
+    {
+      "id": "w3-sft-mechanism",
+      "week": 3,
+      "kind": "Code defense",
+      "title": "Trace the SFT learning signal",
+      "summary": "Explain exactly which tokens teach the model and which training state is inherited.",
+      "prompt": "Trace one conversation through serialization, packing, token IDs, shifted targets, response-only loss masking, and optimizer update. Identify prompts, padding, assistant outputs, and tool content that should or should not receive loss. Explain why loading optimizer state is an intervention and design a control for it. Finally, distinguish changing the data mixture at fixed examples, tokens, and steps.",
+      "estimated_minutes": 25,
+      "skills": ["sft.objective", "method.controls"],
+      "prerequisites": ["w2-portfolio-defense"],
+      "assignment_path": "llm_lab/assignments/week-03-sft.md",
+      "suggested_evidence": ["scripts/chat_sft.py", "llm_lab/templates/data-card.md"],
+      "rubric": [
+        {"id": "serialization", "label": "Serialization & masking", "points": 35, "requirement": "Correctly identifies the supervised token positions and packing behavior."},
+        {"id": "training_state", "label": "Inherited training state", "points": 25, "requirement": "Explains optimizer/checkpoint inheritance and proposes a valid control."},
+        {"id": "data_mixture", "label": "Data-mixture reasoning", "points": 20, "requirement": "Separates fixed-example, fixed-token, and fixed-step interpretations."},
+        {"id": "evaluation", "label": "Evaluation logic", "points": 20, "requirement": "Rejects impressionistic chat quality as sufficient evidence."}
+      ]
+    },
+    {
+      "id": "w3-sft-evaluation",
+      "week": 3,
+      "kind": "Run diagnosis",
+      "title": "Separate capability gain from forgetting",
+      "summary": "Use a frozen matrix and fixed prompts to measure what SFT added and removed.",
+      "prompt": "Attach the same-parent base, SFT baseline, and math-heavy SFT evidence plus your memo. Defend the frozen evaluation matrix, quantify instruction/format gains and base-capability regression separately, analyze the SFT curves, and classify representative failures from the fixed prompt suite. State which conclusion is robust and which remains confounded.",
+      "estimated_minutes": 35,
+      "skills": ["sft.objective", "sft.evaluation", "communication.claims"],
+      "prerequisites": ["w3-sft-mechanism"],
+      "assignment_path": "llm_lab/assignments/week-03-sft.md",
+      "suggested_evidence": ["llm_lab/student/sft-memo.md", "llm_lab/student/sft-data-card.md"],
+      "suggested_run_prefixes": ["w1-baseline", "w3-sft-baseline", "w3-sft-math-heavy"],
+      "rubric": [
+        {"id": "same_parent", "label": "Controlled lineage", "points": 25, "requirement": "All compared SFT variants share the intended base parent and frozen suite."},
+        {"id": "quantitative", "label": "Capability & forgetting", "points": 35, "requirement": "Measures both gains and regressions with relevant held-out metrics."},
+        {"id": "failures", "label": "Fixed failure analysis", "points": 20, "requirement": "Uses categorized fixed prompts rather than selected anecdotes."},
+        {"id": "conclusion", "label": "Bounded conclusion", "points": 20, "requirement": "Distinguishes formatting, instruction following, and knowledge acquisition."}
+      ]
+    },
+    {
+      "id": "w4-dpo-derivation",
+      "week": 4,
+      "kind": "Derivation",
+      "title": "Derive DPO from response log ratios",
+      "summary": "Show what DPO optimizes before relying on an implementation.",
+      "prompt": "Derive the DPO loss for one chosen/rejected pair from response-token log probabilities under the policy and frozen reference. Explain prompt/padding masking, why response log probabilities are sums, why the reference is frozen, the limits as beta approaches zero or becomes large, and how response length can bias the comparison. Include a tiny numerical example with a hand-computed loss.",
+      "estimated_minutes": 30,
+      "skills": ["dpo.objective", "pretrain.accounting"],
+      "prerequisites": ["w3-sft-evaluation"],
+      "assignment_path": "llm_lab/assignments/week-04-dpo.md",
+      "suggested_evidence": ["llm_lab/student/dpo-derivation.md"],
+      "rubric": [
+        {"id": "derivation", "label": "Loss derivation", "points": 35, "requirement": "Correctly derives the policy/reference chosen-rejected log-ratio loss."},
+        {"id": "masking", "label": "Masking & length", "points": 25, "requirement": "Handles response tokens, padding, prompts, and length bias correctly."},
+        {"id": "beta", "label": "Beta & reference", "points": 20, "requirement": "Explains the frozen reference and beta limits without treating beta as a generic LR."},
+        {"id": "hand_check", "label": "Numerical hand check", "points": 20, "requirement": "Provides a reproducible calculation that can validate code independently."}
+      ]
+    },
+    {
+      "id": "w4-dpo-implementation",
+      "week": 4,
+      "kind": "Code + study review",
+      "title": "Verify DPO and audit preference drift",
+      "summary": "Prove the loss is right, then test whether preference accuracy is meaningful.",
+      "prompt": "Attach your DPO implementation, unit tests, data card, and study memo. Show the hand-calculated batch match, swap test, neutral-pair result, frozen-reference gradients, and masking test. Then defend the train/validation preference split and analyze beta, corrupted labels, rejected difficulty, capability retention, KL proxy, length, and at least one stylistic shortcut or ambiguity.",
+      "estimated_minutes": 45,
+      "skills": ["dpo.objective", "dpo.validation", "ablation.inference"],
+      "prerequisites": ["w4-dpo-derivation"],
+      "assignment_path": "llm_lab/assignments/week-04-dpo.md",
+      "suggested_evidence": ["scripts/chat_dpo.py", "tests", "llm_lab/student/dpo-memo.md"],
+      "rubric": [
+        {"id": "implementation", "label": "Independent verification", "points": 35, "requirement": "All required loss, masking, swap, neutral, and gradient tests are convincing."},
+        {"id": "data", "label": "Preference data audit", "points": 20, "requirement": "Split, corruption, ambiguity, and rejected difficulty are auditable."},
+        {"id": "study", "label": "Controlled beta/quality study", "points": 25, "requirement": "Measures held-out preference behavior under controlled interventions."},
+        {"id": "drift", "label": "Drift & failures", "points": 20, "requirement": "Checks capability, KL proxy, length, style shortcuts, and qualitative failures."}
+      ]
+    },
+    {
+      "id": "w5-rl-objective",
+      "week": 5,
+      "kind": "Code + derivation",
+      "title": "Trace the policy-gradient update",
+      "summary": "Explain nanochat's on-policy objective and why it is not full GRPO or PPO.",
+      "prompt": "Trace one GSM8K item from prompt through multiple rollouts, reward extraction, group-mean advantage, response-token log probabilities, accumulation, and update. Derive −A times the response log-probability sum. Explain why the group mean is a baseline, what happens when all rewards are equal, how length/normalization changes updates, and which GRPO/PPO components nanochat omits or modifies.",
+      "estimated_minutes": 30,
+      "skills": ["rl.objective", "pretrain.accounting"],
+      "prerequisites": ["w4-dpo-implementation"],
+      "assignment_path": "llm_lab/assignments/week-05-rl.md",
+      "suggested_evidence": ["scripts/chat_rl.py", "llm_lab/student/rl-derivation.md"],
+      "rubric": [
+        {"id": "trace", "label": "End-to-end trace", "points": 30, "requirement": "Accurately follows data, rollouts, rewards, masks, advantages, and updates."},
+        {"id": "derivation", "label": "Objective derivation", "points": 30, "requirement": "Correctly derives and interprets the implemented policy-gradient loss."},
+        {"id": "baseline", "label": "Group baseline & length", "points": 20, "requirement": "Explains zero-variance groups and normalization/length effects."},
+        {"id": "comparison", "label": "GRPO/PPO comparison", "points": 20, "requirement": "Precisely identifies missing reference KL, ratios/clipping, z-scores, and reuse."}
+      ]
+    },
+    {
+      "id": "w5-rl-audit",
+      "week": 5,
+      "kind": "Run + failure audit",
+      "title": "Interrogate reward improvement",
+      "summary": "Decide whether higher reward represents better reasoning or a measurement exploit.",
+      "prompt": "Attach same-parent group-size runs and your fixed-output audit. Jointly analyze reward, pass@1, pass@k, response length, wall time, and nonzero advantage variance. Explain the information/compute tradeoff for group sizes 2, 4, 8, and 16. Classify verifier failures and reward hacking, and state what can be concluded if reward rises while pass@1 is flat.",
+      "estimated_minutes": 40,
+      "skills": ["rl.evaluation", "ablation.compute", "communication.claims"],
+      "prerequisites": ["w5-rl-objective"],
+      "assignment_path": "llm_lab/assignments/week-05-rl.md",
+      "suggested_evidence": ["llm_lab/student/rl-memo.md", "llm_lab/student/reward-audit.md"],
+      "suggested_run_prefixes": ["w5-rl-baseline", "w5-rl-samples8"],
+      "rubric": [
+        {"id": "joint_metrics", "label": "Joint metric analysis", "points": 30, "requirement": "Reward, pass@k, length, variance, and wall time are interpreted together."},
+        {"id": "group_size", "label": "Group-size control", "points": 25, "requirement": "Separates rollout information, variance, compute, and fixed-time update count."},
+        {"id": "audit", "label": "Reward-hacking audit", "points": 25, "requirement": "Uses a frozen, categorized output audit to test verifier validity."},
+        {"id": "claim", "label": "Calibrated conclusion", "points": 20, "requirement": "Does not equate reward or pass@k movement with reasoning improvement."}
+      ]
+    },
+    {
+      "id": "w6-capstone-protocol",
+      "week": 6,
+      "kind": "Protocol review",
+      "title": "Freeze the Parameter Golf competition",
+      "summary": "Make the 30-minute objective fair before observing the search results.",
+      "prompt": "Attach the committed capstone protocol and reproducible entrypoint. Define the timer, hardware, data/tokenizer, validation split, sealed test, checkpoint limit, precomputation, and retry rules. Show the official d6, best-single-intervention, and simple-alternative baselines. Explain the staged search, interaction tests, candidate lock, exact reproduction, and one-time final test.",
+      "estimated_minutes": 35,
+      "skills": ["capstone.protocol", "method.reproducibility", "ablation.compute"],
+      "prerequisites": ["w5-rl-audit"],
+      "assignment_path": "llm_lab/assignments/week-06-capstone.md",
+      "suggested_evidence": ["llm_lab/student/capstone-protocol.md", "scripts/run_parameter_golf.py"],
+      "rubric": [
+        {"id": "frozen_rules", "label": "Frozen fair rules", "points": 30, "requirement": "Every budget, data, evaluation, artifact, and failure rule is operational and precommitted."},
+        {"id": "baselines", "label": "Required baselines", "points": 20, "requirement": "The official, strongest single, and simple baselines answer distinct questions."},
+        {"id": "search", "label": "Evidence-driven search", "points": 25, "requirement": "Pilots, confirmations, interactions, lock, reproduction, and final test are staged correctly."},
+        {"id": "entrypoint", "label": "Exact entrypoint", "points": 25, "requirement": "One command verifies provenance, isolates artifacts, runs, logs, and evaluates."}
+      ]
+    },
+    {
+      "id": "w6-capstone-defense",
+      "week": 6,
+      "kind": "Final oral defense",
+      "title": "Defend the final model—and the discarded ideas",
+      "summary": "Earn mastery by explaining causal evidence, uncertainty, reproduction, and limits.",
+      "prompt": "Attach the final report and run evidence. State one measured claim with budget and effect size. Defend the ablation ladder, validation-versus-time and tokens, throughput tails, reproduction difference, and test gap. Identify the strongest causal intervention, the result most likely to be selection noise, a change that helps per token but hurts per minute, five discarded ideas, and the conclusion least likely to scale beyond d6.",
+      "estimated_minutes": 45,
+      "skills": ["capstone.protocol", "communication.claims", "ablation.inference"],
+      "prerequisites": ["w6-capstone-protocol"],
+      "assignment_path": "llm_lab/assignments/week-06-capstone.md",
+      "suggested_evidence": ["llm_lab/student/final-report.md", "llm_lab/student/model-card.md", "llm_lab/student/conclusions.json"],
+      "rubric": [
+        {"id": "result", "label": "Measured result", "points": 25, "requirement": "The final claim includes metric, effect size, budget, baseline, and reproduction."},
+        {"id": "causal_evidence", "label": "Causal evidence", "points": 25, "requirement": "The ablation ladder and interactions justify the selected configuration."},
+        {"id": "discipline", "label": "Test & negative-result discipline", "points": 25, "requirement": "The sealed test, discarded ideas, uncertainty, and selection risks are reported honestly."},
+        {"id": "communication", "label": "Scientific communication", "points": 25, "requirement": "Claims are concise, reproducible, calibrated, and bounded beyond the local setting."}
+      ]
+    }
+  ]
+}

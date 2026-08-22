@@ -3,235 +3,441 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nanochat Laboratory</title>
+  <meta name="description" content="Adaptive, LLM-graded mastery course for the Nanochat language-model laboratory.">
+  <title>Nanochat Mastery Lab</title>
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: light-dark(#f5f2ea, #101416);
-      --panel: light-dark(#fffdf8, #182024);
-      --ink: light-dark(#202522, #eef3ef);
-      --muted: light-dark(#667069, #aab6af);
-      --line: light-dark(#d8ddd7, #34413b);
-      --accent: light-dark(#175c45, #75d7aa);
-      --accent-soft: light-dark(#dceee5, #203c31);
-      --danger: light-dark(#a13d32, #ff9185);
+      color-scheme: light;
+      --navy: #17243c;
+      --navy-2: #223453;
+      --paper: #f4f1e9;
+      --card: #fffdf8;
+      --ink: #1b2638;
+      --muted: #667085;
+      --line: #dcd8cf;
+      --line-dark: #33435e;
+      --amber: #e9a23b;
+      --amber-soft: #fff0d1;
+      --teal: #238777;
+      --teal-soft: #dff1ec;
+      --red: #b84b45;
+      --red-soft: #f8e5e1;
+      --blue: #456faf;
+      --blue-soft: #e7eef9;
+      --shadow: 0 12px 30px rgba(24, 36, 59, .08);
+      --radius: 16px;
       font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--ink); }
-    main { width: min(1180px, calc(100% - 32px)); margin: 36px auto 64px; }
-    header { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-    h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(30px, 5vw, 48px); font-weight: 500; }
-    header p { margin: 8px 0 0; color: var(--muted); }
-    .status { color: var(--muted); font-size: 14px; text-align: right; }
-    .workspace { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 18px; }
-    section { background: var(--panel); border: 1px solid var(--line); }
-    .runs { max-height: 680px; overflow: auto; }
-    .section-title { position: sticky; top: 0; z-index: 2; margin: 0; padding: 16px 18px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
-    .run { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
-    .run:hover { background: var(--accent-soft); }
-    .run input { margin-top: 3px; accent-color: var(--accent); }
-    .run strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
-    .run small { display: block; margin-top: 4px; color: var(--muted); }
-    .analysis { min-width: 0; }
-    .controls { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
-    label { font-size: 13px; color: var(--muted); }
-    select { margin-left: 7px; padding: 7px 28px 7px 9px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
-    button { padding: 8px 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
-    button:hover { border-color: var(--accent); color: var(--accent); }
-    .chart-wrap { padding: 18px; min-height: 400px; }
-    svg { display: block; width: 100%; height: 380px; overflow: visible; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); }
+    button, textarea, input, select { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; }
+    .app-shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+    .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 26px 20px 20px; overflow-y: auto; background: var(--navy); color: #f8f5ec; }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 0 7px 26px; }
+    .brand-mark { width: 37px; height: 37px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.25); border-radius: 10px; color: var(--amber); font: 700 17px/1 Georgia, serif; }
+    .brand strong { display: block; font: 600 17px/1.2 Georgia, serif; }
+    .brand span { display: block; margin-top: 3px; color: #aeb9cb; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+    .nav { display: grid; gap: 6px; }
+    .nav-button { width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: #bfc8d8; text-align: left; }
+    .nav-button:hover, .nav-button.active { background: rgba(255,255,255,.09); color: white; }
+    .nav-icon { width: 20px; color: var(--amber); font-size: 14px; text-align: center; }
+    .side-progress { margin-top: 28px; padding: 17px; border: 1px solid var(--line-dark); border-radius: 12px; background: rgba(255,255,255,.035); }
+    .side-progress-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .side-progress-head span { color: #aeb9cb; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .side-progress-head strong { font: 500 25px/1 Georgia, serif; color: white; }
+    .progress-track { height: 7px; overflow: hidden; margin: 12px 0 8px; border-radius: 999px; background: #2b3b57; }
+    .progress-fill { height: 100%; border-radius: inherit; background: var(--amber); transition: width .4s ease; }
+    .side-progress small { color: #99a8bd; line-height: 1.4; }
+    .side-footer { margin-top: auto; padding: 22px 7px 0; color: #97a6ba; font-size: 11px; line-height: 1.5; }
+    .model-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px rgba(35,135,119,.17); }
+    .model-dot.off { background: var(--red); box-shadow: none; }
+    .main { min-width: 0; padding: 0 34px 60px; }
+    .topbar { min-height: 79px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+    .topbar-title { color: var(--muted); font-size: 13px; }
+    .topbar-title strong { color: var(--ink); }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .model-pill { padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.45); color: var(--muted); font-size: 12px; }
+    .ghost-button, .secondary-button, .primary-button, .chip-button { border-radius: 9px; }
+    .ghost-button { padding: 8px 11px; border: 1px solid var(--line); background: transparent; color: var(--muted); text-decoration: none; font-size: 12px; }
+    .ghost-button:hover { color: var(--ink); border-color: #aaa59b; }
+    .view { display: none; padding-top: 31px; }
+    .view.active { display: block; }
+    .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .eyebrow { margin: 0 0 7px; color: var(--teal); font-size: 11px; font-weight: 750; letter-spacing: .11em; text-transform: uppercase; }
+    h1, h2, h3, p { overflow-wrap: anywhere; }
+    h1 { margin: 0; font: 500 clamp(31px, 4vw, 46px)/1.08 Georgia, serif; letter-spacing: -.025em; }
+    .page-heading > div > p:last-child { max-width: 680px; margin: 10px 0 0; color: var(--muted); line-height: 1.55; }
+    .learn-layout { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 22px; align-items: start; }
+    .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); }
+    .challenge-card { overflow: hidden; }
+    .challenge-head { padding: 29px 30px 26px; border-bottom: 1px solid var(--line); background: linear-gradient(145deg, #fffdf8 55%, #f5ead6); }
+    .challenge-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 17px; }
+    .tag { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 999px; background: var(--blue-soft); color: #365d97; font-size: 11px; font-weight: 650; }
+    .tag.warm { background: var(--amber-soft); color: #8b5b17; }
+    .tag.success { background: var(--teal-soft); color: #1e6e62; }
+    .tag.danger { background: var(--red-soft); color: #944039; }
+    .challenge-head h2 { max-width: 750px; margin: 0; font: 500 clamp(26px, 3vw, 38px)/1.14 Georgia, serif; letter-spacing: -.02em; }
+    .challenge-summary { max-width: 720px; margin: 10px 0 0; color: var(--muted); line-height: 1.55; }
+    .skill-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
+    .skill-chip { padding: 6px 9px; border: 1px solid #d7d4cb; border-radius: 7px; color: #4d5b70; background: rgba(255,255,255,.7); font-size: 11px; }
+    .challenge-body { padding: 27px 30px 31px; }
+    .section-label { margin: 0 0 10px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+    .prompt-copy { margin: 0; color: #26344a; font-size: 15px; line-height: 1.72; white-space: pre-wrap; }
+    .rubric-details { margin: 22px 0 26px; border: 1px solid var(--line); border-radius: 10px; }
+    .rubric-details summary { padding: 12px 14px; cursor: pointer; color: #4e5c70; font-size: 13px; font-weight: 650; }
+    .rubric-list { display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .rubric-item { display: grid; grid-template-columns: 1fr auto; gap: 8px 18px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .rubric-item:last-child { border-bottom: 0; }
+    .rubric-item strong { font-size: 13px; }
+    .rubric-item span { color: var(--teal); font-size: 12px; font-weight: 700; }
+    .rubric-item p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .field { display: block; margin-top: 22px; }
+    .field-head { display: flex; justify-content: space-between; gap: 15px; align-items: baseline; margin-bottom: 8px; }
+    .field-head label, .field > label { color: #344258; font-size: 13px; font-weight: 700; }
+    .field-head span, .field-hint { color: var(--muted); font-size: 11px; }
+    textarea { width: 100%; padding: 14px 15px; resize: vertical; border: 1px solid #cbc7bd; border-radius: 10px; outline: none; background: #fffefb; color: var(--ink); font: 400 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(69,111,175,.11); }
+    #answer { min-height: 235px; font-family: inherit; }
+    #evidence-paths { min-height: 83px; }
+    .evidence-box { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #faf8f2; }
+    .evidence-box h3 { margin: 0 0 4px; font-size: 14px; }
+    .evidence-box > p { margin: 0 0 13px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+    .chip-button { padding: 6px 8px; border: 1px solid #d2cec4; background: var(--card); color: #4e5c70; font-size: 11px; }
+    .chip-button:hover { border-color: var(--blue); color: var(--blue); }
+    .run-evidence { display: grid; gap: 7px; max-height: 190px; margin-top: 9px; overflow-y: auto; }
+    .run-choice { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center; padding: 8px 9px; border: 1px solid #e0dcd3; border-radius: 8px; background: white; font-size: 11px; }
+    .run-choice input { accent-color: var(--teal); }
+    .run-choice strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-choice span { color: var(--muted); }
+    .suggested-mark { color: #8b5b17 !important; font-weight: 700; }
+    .grader-note { display: flex; gap: 10px; margin: 18px 0; padding: 12px 13px; border-radius: 9px; background: var(--blue-soft); color: #3d5e8d; font-size: 12px; line-height: 1.5; }
+    .primary-button { min-width: 200px; padding: 12px 17px; border: 1px solid var(--navy); background: var(--navy); color: white; font-weight: 700; }
+    .primary-button:hover { background: var(--navy-2); }
+    .primary-button:disabled { cursor: not-allowed; opacity: .55; }
+    .secondary-button { padding: 10px 14px; border: 1px solid var(--line); background: white; color: var(--ink); font-weight: 650; }
+    .secondary-button:hover { border-color: var(--blue); color: var(--blue); }
+    .submission-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+    .submit-status { color: var(--muted); font-size: 12px; }
+    .submit-status.error { color: var(--red); }
+    .queue { position: sticky; top: 20px; overflow: hidden; }
+    .queue-head { padding: 17px 18px; border-bottom: 1px solid var(--line); }
+    .queue-head h3 { margin: 0; font-size: 14px; }
+    .queue-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .activity-list { max-height: calc(100vh - 220px); overflow-y: auto; }
+    .activity-button { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 9px; align-items: start; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; }
+    .activity-button:hover, .activity-button.active { background: #f5f2ea; }
+    .activity-button.locked { color: #9299a5; }
+    .activity-week { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; background: var(--blue-soft); color: var(--blue); font-size: 10px; font-weight: 750; }
+    .activity-button.active .activity-week { background: var(--navy); color: white; }
+    .activity-button strong { display: block; font-size: 12px; line-height: 1.35; }
+    .activity-button small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .activity-score { color: var(--teal); font-size: 11px; font-weight: 750; }
+    .result-card { margin-top: 22px; overflow: hidden; }
+    .result-head { display: grid; grid-template-columns: 96px 1fr; gap: 21px; align-items: center; padding: 24px 27px; border-bottom: 1px solid var(--line); background: #f8f6ef; }
+    .score-ring { width: 88px; height: 88px; display: grid; place-items: center; border: 8px solid var(--teal-soft); border-top-color: var(--teal); border-radius: 50%; font: 500 30px/1 Georgia, serif; }
+    .score-ring.low { border-color: var(--red-soft); border-top-color: var(--red); }
+    .result-head h3 { margin: 2px 0 6px; font: 500 24px/1.2 Georgia, serif; }
+    .result-head p { margin: 0; color: var(--muted); line-height: 1.55; }
+    .result-meta { color: var(--muted); font-size: 10px; }
+    .result-body { padding: 24px 27px 28px; }
+    .score-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .score-table th, .score-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .score-table th { color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+    .score-table td:last-child, .score-table th:last-child { text-align: right; white-space: nowrap; }
+    .feedback-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+    .feedback-panel { padding: 15px 16px; border-radius: 10px; background: var(--teal-soft); }
+    .feedback-panel.gaps { background: var(--amber-soft); }
+    .feedback-panel h4 { margin: 0 0 8px; font-size: 12px; }
+    .feedback-panel ul, .next-actions ol { margin: 0; padding-left: 18px; }
+    .feedback-panel li, .next-actions li { margin: 5px 0; color: #425067; font-size: 12px; line-height: 1.45; }
+    .next-actions { margin-top: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; }
+    .next-actions h4 { margin: 0 0 8px; font-size: 12px; }
+    .follow-up { margin-top: 16px; padding: 15px 17px; border-left: 3px solid var(--amber); background: #fcf8ef; color: #3c495e; font: italic 15px/1.55 Georgia, serif; }
+    .result-actions { display: flex; gap: 9px; margin-top: 18px; }
+    .locked-message, .empty-state, .api-warning { padding: 26px; border: 1px dashed #c9c4b8; border-radius: 12px; background: #faf8f1; color: var(--muted); text-align: center; line-height: 1.55; }
+    .api-warning { margin-bottom: 18px; border-color: #dfaea9; background: var(--red-soft); color: #843c37; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat-card { padding: 19px; }
+    .stat-card span { color: var(--muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+    .stat-card strong { display: block; margin-top: 8px; font: 500 31px/1 Georgia, serif; }
+    .stat-card small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .panel { margin-top: 18px; overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 17px 19px; border-bottom: 1px solid var(--line); }
+    .panel-head h2 { margin: 0; font-size: 15px; }
+    .panel-head p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .table-wrap { overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .data-table th, .data-table td { padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; }
+    .data-table th { color: var(--muted); font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+    .data-table tr:last-child td { border-bottom: 0; }
+    .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .inline-bar { min-width: 120px; display: grid; grid-template-columns: 1fr 31px; gap: 8px; align-items: center; }
+    .inline-track { height: 6px; overflow: hidden; border-radius: 99px; background: #e7e3da; }
+    .inline-fill { height: 100%; border-radius: inherit; background: var(--teal); }
+    .skills-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 16px; }
+    .skill-card { padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: #fffefb; }
+    .skill-card-head { display: flex; justify-content: space-between; gap: 10px; }
+    .skill-card h3 { margin: 0; font-size: 12px; }
+    .skill-card strong { color: var(--teal); font-size: 12px; }
+    .skill-card p { min-height: 32px; margin: 7px 0 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .skill-card small { display: block; margin-top: 7px; color: var(--muted); font-size: 9px; }
+    .runs-layout { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 18px; }
+    .run-list { max-height: 700px; overflow-y: auto; }
+    .metric-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    .metric-controls label { color: var(--muted); font-size: 11px; }
+    select { margin-left: 7px; padding: 7px 28px 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: white; color: var(--ink); }
+    .compare-run { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .compare-run:hover { background: #f7f4ed; }
+    .compare-run input { margin-top: 3px; accent-color: var(--teal); }
+    .compare-run strong { display: block; overflow-wrap: anywhere; font-size: 11px; }
+    .compare-run small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .chart-wrap { min-height: 410px; padding: 18px; }
+    .chart-wrap svg { display: block; width: 100%; height: 370px; overflow: visible; }
     .axis, .grid { stroke: var(--line); stroke-width: 1; }
-    .grid { opacity: .6; }
-    .axis-label, .tick { fill: var(--muted); font-size: 12px; }
-    .empty { display: grid; min-height: 360px; place-items: center; color: var(--muted); text-align: center; }
-    .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
-    .legend span::before { content: ""; display: inline-block; width: 18px; height: 3px; margin: 0 7px 3px 0; background: var(--series); }
-    #table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; margin-top: 18px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
-    th { color: var(--muted); font-weight: 600; }
-    td.num { font-variant-numeric: tabular-nums; text-align: right; }
-    .warning { color: var(--danger); }
-    @media (max-width: 760px) {
-      main { width: min(100% - 20px, 720px); margin-top: 20px; }
-      header { align-items: start; flex-direction: column; }
-      .status { text-align: left; }
-      .workspace { grid-template-columns: 1fr; }
-      .runs { max-height: 270px; }
-      .controls { align-items: stretch; flex-direction: column; }
-      svg { height: 320px; }
+    .grid { opacity: .65; }
+    .axis-label, .tick { fill: var(--muted); font-size: 11px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 7px; color: var(--muted); font-size: 10px; }
+    .legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin: 0 5px 2px 0; background: var(--series); }
+    .history-attempt { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .history-attempt:last-child { border-bottom: 0; }
+    .history-attempt summary { display: grid; grid-template-columns: 50px 1fr auto; gap: 13px; align-items: center; cursor: pointer; list-style: none; }
+    .history-attempt summary::-webkit-details-marker { display: none; }
+    .history-score { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 50%; background: var(--teal-soft); color: #176c5f; font-weight: 800; }
+    .history-score.low { background: var(--red-soft); color: var(--red); }
+    .history-attempt h3 { margin: 0; font-size: 13px; }
+    .history-attempt small { color: var(--muted); font-size: 10px; }
+    .history-body { margin: 15px 0 0 63px; color: #455269; font-size: 12px; line-height: 1.55; }
+    .history-body h4 { margin: 14px 0 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    .history-answer { max-height: 180px; padding: 12px; overflow: auto; border-radius: 8px; background: #f5f2ea; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .loading { min-height: 70vh; display: grid; place-items: center; color: var(--muted); }
+    .spinner { width: 24px; height: 24px; display: inline-block; margin-right: 8px; vertical-align: middle; border: 3px solid rgba(255,255,255,.25); border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 1060px) {
+      .learn-layout { grid-template-columns: 1fr; }
+      .queue { position: static; }
+      .activity-list { max-height: 340px; }
+      .skills-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .runs-layout { grid-template-columns: 260px minmax(0, 1fr); }
+    }
+    @media (max-width: 780px) {
+      .app-shell { display: block; }
+      .sidebar { position: static; width: 100%; height: auto; padding: 16px; }
+      .brand { padding-bottom: 14px; }
+      .nav { grid-template-columns: repeat(4, 1fr); }
+      .nav-button { justify-content: center; padding: 10px 6px; text-align: center; }
+      .nav-icon { display: none; }
+      .side-progress, .side-footer { display: none; }
+      .main { padding: 0 16px 45px; }
+      .topbar { min-height: 64px; }
+      .topbar-title { display: none; }
+      .top-actions { width: 100%; justify-content: space-between; }
+      .page-heading { align-items: start; flex-direction: column; }
+      .challenge-head, .challenge-body { padding-left: 20px; padding-right: 20px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .feedback-grid { grid-template-columns: 1fr; }
+      .skills-grid { grid-template-columns: 1fr; }
+      .runs-layout { grid-template-columns: 1fr; }
+      .run-list { max-height: 280px; }
+      .result-head { grid-template-columns: 72px 1fr; }
+      .score-ring { width: 68px; height: 68px; border-width: 6px; font-size: 23px; }
+      .submission-row { align-items: stretch; flex-direction: column; }
+      .primary-button { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <header>
-      <div>
-        <h1>Nanochat Laboratory</h1>
-        <p>Compare learning dynamics, final quality, and compute—not just winners.</p>
-      </div>
-      <div class="status" id="status" role="status">Loading runs…</div>
-    </header>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">N</div><div><strong>Mastery Lab</strong><span>Nanochat course</span></div></div>
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-button active" data-view="learn" type="button"><span class="nav-icon">◆</span>Learn</button>
+        <button class="nav-button" data-view="progress" type="button"><span class="nav-icon">◎</span>Progress</button>
+        <button class="nav-button" data-view="runs" type="button"><span class="nav-icon">⌁</span>Runs</button>
+        <button class="nav-button" data-view="history" type="button"><span class="nav-icon">↺</span>History</button>
+      </nav>
+      <div class="side-progress"><div class="side-progress-head"><span>Course mastery</span><strong id="side-mastery">—</strong></div><div class="progress-track"><div class="progress-fill" id="side-mastery-bar" style="width:0%"></div></div><small id="side-progress-copy">Loading your evidence record…</small></div>
+      <div class="side-footer" id="side-grader"><span class="model-dot"></span>Checking grader…</div>
+    </aside>
 
-    <div class="workspace">
-      <section class="runs" aria-label="Available runs">
-        <h2 class="section-title">Runs · select up to six</h2>
-        <div id="run-list"></div>
+    <main class="main">
+      <header class="topbar"><div class="topbar-title"><strong>Nanochat Mastery Lab</strong> · evidence before claims</div><div class="top-actions"><span class="model-pill" id="model-pill">Anthropic grader</span><a class="ghost-button" href="/api/learning/export" download>Export progress</a></div></header>
+      <div class="loading" id="loading">Loading your mastery plan…</div>
+
+      <section class="view" id="view-learn">
+        <div class="page-heading"><div><p class="eyebrow">Adaptive study session</p><h1>Prove what you know.</h1><p>The next task is selected from your weakest unlocked skills. Opus grades the answer and only the artifacts you attach; revise until the evidence reaches the mastery bar.</p></div></div>
+        <div id="api-warning"></div>
+        <div class="learn-layout"><div><article class="card challenge-card" id="challenge-card"></article><div id="result-container"></div></div><aside class="card queue" aria-label="Course activities"><div class="queue-head"><h3>Mastery path</h3><p>85 to pass · repeated evidence to master</p></div><div class="activity-list" id="activity-list"></div></aside></div>
       </section>
 
-      <section class="analysis" aria-label="Metric comparison">
-        <div class="controls">
-          <label>Metric
-            <select id="metric">
-              <option value="val_bpb">Validation BPB</option>
-              <option value="train_loss">Training loss</option>
-              <option value="tokens_per_second">Tokens / second</option>
-              <option value="lr_multiplier">LR multiplier</option>
-              <option value="core">CORE</option>
-              <option value="chatcore">ChatCORE</option>
-              <option value="reward">Reward</option>
-              <option value="pass_at_1">Pass@1</option>
-            </select>
-          </label>
-          <button id="clear" type="button">Clear selection</button>
-        </div>
-        <div class="chart-wrap" id="chart-wrap">
-          <div class="empty">Select one or more controlled runs to inspect.</div>
-        </div>
+      <section class="view" id="view-progress">
+        <div class="page-heading"><div><p class="eyebrow">Evidence-backed transcript</p><h1>Your progress.</h1><p>Grades come from the best LLM-assessed attempt for each activity. Mastery is more conservative: it combines repeated skill-level evidence across tasks.</p></div></div>
+        <div class="stats-grid" id="stats-grid"></div>
+        <section class="card panel"><div class="panel-head"><div><h2>Course grades</h2><p>Weighted exactly like the manual course rubric</p></div></div><div class="table-wrap"><table class="data-table" id="week-table"></table></div></section>
+        <section class="card panel"><div class="panel-head"><div><h2>Skill mastery map</h2><p>Two or three strong demonstrations usually establish mastery</p></div></div><div class="skills-grid" id="skills-grid"></div></section>
+        <section class="card panel"><div class="panel-head"><div><h2>Activity transcript</h2><p>Best score, most recent score, and attempt count</p></div></div><div class="table-wrap"><table class="data-table" id="activity-table"></table></div></section>
       </section>
-    </div>
-    <div id="table-wrap"></div>
-  </main>
+
+      <section class="view" id="view-runs">
+        <div class="page-heading"><div><p class="eyebrow">Experimental evidence</p><h1>Inspect your runs.</h1><p>Compare learning dynamics, quality, and compute here. Return to Learn to attach selected run IDs to an assessment.</p></div></div>
+        <div class="runs-layout"><section class="card"><div class="panel-head"><div><h2>Captured runs</h2><p>Select up to six</p></div></div><div class="run-list" id="compare-run-list"></div></section><div><section class="card"><div class="metric-controls"><label>Metric<select id="metric-select"><option value="val_bpb">Validation BPB</option><option value="train_loss">Training loss</option><option value="tokens_per_second">Tokens / second</option><option value="lr_multiplier">LR multiplier</option><option value="core">CORE</option><option value="chatcore">ChatCORE</option><option value="reward">Reward</option><option value="pass_at_1">Pass@1</option></select></label><button class="ghost-button" id="clear-runs" type="button">Clear</button></div><div class="chart-wrap" id="chart-wrap"><div class="empty-state">Select controlled runs to compare.</div></div></section><div id="run-table"></div></div></div>
+      </section>
+
+      <section class="view" id="view-history">
+        <div class="page-heading"><div><p class="eyebrow">Iteration record</p><h1>Every attempt.</h1><p>Nothing is overwritten. Open an attempt to review the exact answer, grade, feedback, attached evidence, and evaluator metadata.</p></div></div>
+        <section class="card" id="history-list"></section>
+      </section>
+    </main>
+  </div>
 
   <script>
-    const palette = ["#16866a", "#cf6b32", "#6f71c9", "#b74876", "#65902f", "#3c82ba"];
-    const state = { runs: [], selected: new Map(), metric: "val_bpb" };
-    const runList = document.getElementById("run-list");
-    const chartWrap = document.getElementById("chart-wrap");
-    const tableWrap = document.getElementById("table-wrap");
-    const status = document.getElementById("status");
-    const metricSelect = document.getElementById("metric");
+    const palette = ["#238777", "#d78432", "#536fbd", "#ad5275", "#76953b", "#3d83a6"];
+    const state = { learning: null, view: "learn", currentActivityId: null, drafts: {}, lastAttempt: null, selectedRuns: new Map(), metric: "val_bpb" };
 
-    fetch("/api/runs")
-      .then(response => response.json())
-      .then(runs => {
-        state.runs = runs;
-        status.textContent = `${runs.length} captured run${runs.length === 1 ? "" : "s"}`;
-        renderRunList();
-      })
-      .catch(error => { status.innerHTML = `<span class="warning">${escapeHtml(error.message)}</span>`; });
+    document.querySelectorAll(".nav-button").forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
+    document.getElementById("metric-select").addEventListener("change", event => { state.metric = event.target.value; renderRunChart(); });
+    document.getElementById("clear-runs").addEventListener("click", () => { state.selectedRuns.clear(); renderRuns(); });
+    loadLearning();
 
-    metricSelect.addEventListener("change", () => { state.metric = metricSelect.value; render(); });
-    document.getElementById("clear").addEventListener("click", () => {
-      state.selected.clear();
-      renderRunList();
-      render();
-    });
-
-    function renderRunList() {
-      if (!state.runs.length) {
-        runList.innerHTML = '<div class="empty">No runs yet.<br>Start with w0-smoke.</div>';
-        return;
-      }
-      runList.innerHTML = state.runs.map(run => {
-        const checked = state.selected.has(run.execution_id) ? "checked" : "";
-        const minutes = ((run.duration_seconds || 0) / 60).toFixed(1);
-        return `<label class="run">
-          <input type="checkbox" data-id="${escapeHtml(run.execution_id)}" ${checked}>
-          <span><strong>${escapeHtml(run.execution_id)}</strong><small>${escapeHtml(run.topic)} · ${minutes} min · ${escapeHtml(run.status)}</small></span>
-        </label>`;
-      }).join("");
-      runList.querySelectorAll("input").forEach(input => input.addEventListener("change", async event => {
-        const id = event.target.dataset.id;
-        if (event.target.checked && state.selected.size >= 6) {
-          event.target.checked = false;
-          status.textContent = "Select at most six runs.";
-          return;
-        }
-        if (event.target.checked) {
-          const metrics = await fetch(`/api/metrics?run=${encodeURIComponent(id)}`).then(response => response.json());
-          state.selected.set(id, metrics);
-        } else {
-          state.selected.delete(id);
-        }
-        render();
-      }));
+    async function loadLearning() {
+      try {
+        const response = await fetch("/api/learning");
+        if (!response.ok) throw new Error(`Could not load learning plan (${response.status})`);
+        state.learning = await response.json();
+        state.currentActivityId = state.learning.next_activity_id || state.learning.activities[0]?.id;
+        document.getElementById("loading").style.display = "none";
+        renderAll();
+        showView("learn");
+      } catch (error) { document.getElementById("loading").innerHTML = `<div class="api-warning">${escapeHtml(error.message)}</div>`; }
     }
 
-    function render() {
-      const series = [...state.selected.entries()].map(([id, metrics]) => ({
-        id,
-        points: metrics.filter(metric => metric.name === state.metric).map(metric => ({ x: metric.step, y: metric.value }))
-      })).filter(series => series.points.length);
-      if (!series.length) {
-        chartWrap.innerHTML = `<div class="empty">No ${escapeHtml(metricLabel())} observations in the selected runs.</div>`;
-        tableWrap.innerHTML = "";
-        return;
-      }
-      drawChart(series);
-      drawTable(series);
+    function renderAll() { renderChrome(); renderLearn(); renderProgress(); renderRuns(); renderHistory(); }
+
+    function renderChrome() {
+      const { stats, grader, course } = state.learning;
+      document.getElementById("side-mastery").textContent = `${stats.overall_mastery}%`;
+      document.getElementById("side-mastery-bar").style.width = `${stats.overall_mastery}%`;
+      document.getElementById("side-progress-copy").textContent = `${stats.mastered_skills} of ${stats.total_skills} skills mastered · target ${course.mastery_threshold}%`;
+      document.getElementById("model-pill").textContent = `${grader.model} · ${grader.effort}`;
+      document.getElementById("side-grader").innerHTML = `<span class="model-dot ${grader.configured ? "" : "off"}"></span>${grader.configured ? "Opus grader ready" : "ANTHROPIC_API_KEY missing"}<br>${escapeHtml(grader.model)} · ${escapeHtml(grader.effort)} effort`;
+      document.getElementById("api-warning").innerHTML = grader.configured ? "" : '<div class="api-warning">The learning plan is available, but grading is disabled because <code>ANTHROPIC_API_KEY</code> is not visible to this process.</div>';
     }
 
-    function drawChart(series) {
-      const width = Math.max(300, chartWrap.clientWidth - 36);
-      const height = 350;
-      const margin = { top: 18, right: 22, bottom: 50, left: 70 };
-      const all = series.flatMap(item => item.points);
-      const xMin = Math.min(...all.map(point => point.x));
-      const xMax = Math.max(...all.map(point => point.x));
-      const yMinRaw = Math.min(...all.map(point => point.y));
-      const yMaxRaw = Math.max(...all.map(point => point.y));
-      const yPad = Math.max((yMaxRaw - yMinRaw) * .08, Math.abs(yMaxRaw || 1) * .01);
-      const yMin = yMinRaw - yPad;
-      const yMax = yMaxRaw + yPad;
-      const x = value => margin.left + (value - xMin) / Math.max(1, xMax - xMin) * (width - margin.left - margin.right);
-      const y = value => height - margin.bottom - (value - yMin) / Math.max(Number.EPSILON, yMax - yMin) * (height - margin.top - margin.bottom);
-      const ticks = 5;
+    function showView(view) {
+      state.view = view;
+      document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button.dataset.view === view));
+      document.querySelectorAll(".view").forEach(section => section.classList.toggle("active", section.id === `view-${view}`));
+      if (view === "runs") setTimeout(renderRunChart, 0);
+    }
+
+    function currentActivity() { return state.learning.activities.find(item => item.id === state.currentActivityId) || state.learning.activities[0]; }
+    function draftFor(activityId) { if (!state.drafts[activityId]) state.drafts[activityId] = { answer: "", evidencePaths: "", runIds: new Set() }; return state.drafts[activityId]; }
+
+    function renderLearn() {
+      const activity = currentActivity();
+      renderActivityList();
+      if (!activity) { document.getElementById("challenge-card").innerHTML = '<div class="empty-state">No learning activities are configured.</div>'; return; }
+      const draft = draftFor(activity.id);
+      const skills = activity.skills.map(id => state.learning.skills.find(item => item.id === id)).filter(Boolean);
+      const statusTag = activity.status === "passed" ? '<span class="tag success">Passed</span>' : activity.status === "needs_revision" ? '<span class="tag danger">Revise</span>' : activity.status === "locked" ? '<span class="tag">Locked</span>' : '<span class="tag warm">Next challenge</span>';
+      const locked = activity.locked_by.length > 0;
+      document.getElementById("challenge-card").innerHTML = `<div class="challenge-head"><div class="challenge-meta"><span class="tag">Week ${activity.week}</span><span class="tag">${escapeHtml(activity.kind)}</span><span class="tag">≈ ${activity.estimated_minutes} min</span>${statusTag}</div><h2>${escapeHtml(activity.title)}</h2><p class="challenge-summary">${escapeHtml(activity.summary)}</p><div class="skill-chips">${skills.map(skill => `<span class="skill-chip">${escapeHtml(skill.title)} · ${skill.mastery_percent}%</span>`).join("")}</div></div><div class="challenge-body"><p class="section-label">Your task</p><p class="prompt-copy">${escapeHtml(activity.prompt)}</p><details class="rubric-details"><summary>View the 100-point grading rubric</summary><div class="rubric-list">${activity.rubric.map(item => `<div class="rubric-item"><strong>${escapeHtml(item.label)}</strong><span>${item.points} pts</span><p>${escapeHtml(item.requirement)}</p></div>`).join("")}</div></details>${locked ? `<div class="locked-message">This activity unlocks after: <strong>${activity.locked_by.map(id => escapeHtml(activityTitle(id))).join(", ")}</strong>.</div>` : renderSubmissionForm(activity, draft)}</div>`;
+      if (!locked) bindSubmissionForm(activity);
+      renderResult(activity);
+    }
+
+    function renderSubmissionForm(activity, draft) {
+      const runs = evidenceRuns(activity, draft);
+      const suggestions = (activity.suggested_evidence || []).map(path => `<button type="button" class="chip-button evidence-suggestion" data-path="${escapeHtml(path)}">+ ${escapeHtml(path)}</button>`).join("");
+      return `<div class="field"><div class="field-head"><label for="answer">Written defense</label><span>Explain decisions; do not paste the reference answer.</span></div><textarea id="answer" placeholder="Write your reasoning, calculations, interpretation, or code defense here…">${escapeHtml(draft.answer)}</textarea></div><div class="evidence-box"><h3>Attach evidence</h3><p>Files and run artifacts are read on the server, hashed, and sent to the evaluator with your answer. The API key never enters this page.</p><div class="field"><div class="field-head"><label for="evidence-paths">Workspace paths</label><span>One relative path per line · folders supported</span></div><textarea id="evidence-paths" placeholder="llm_lab/student/protocol.md&#10;tests/test_my_change.py">${escapeHtml(draft.evidencePaths)}</textarea>${suggestions ? `<div class="suggestions">${suggestions}</div>` : ""}</div><div class="field"><div class="field-head"><label>Captured runs</label><span>Select the immutable run evidence to grade</span></div><div class="run-evidence">${runs}</div></div></div><div class="grader-note"><span>◆</span><span><strong>${escapeHtml(state.learning.grader.model)}</strong> grades against this activity's rubric and course reference. Scores below 85 return a focused retry plan; mastery combines repeated skill evidence.</span></div><div class="submission-row"><button class="primary-button" id="grade-button" type="button" ${state.learning.grader.configured ? "" : "disabled"}>Grade this attempt</button><span class="submit-status" id="submit-status" role="status"></span></div>`;
+    }
+
+    function evidenceRuns(activity, draft) {
+      const prefixes = activity.suggested_run_prefixes || [];
+      const runs = [...state.learning.runs].sort((a, b) => Number(prefixes.some(prefix => String(b.experiment_id || b.execution_id).startsWith(prefix))) - Number(prefixes.some(prefix => String(a.experiment_id || a.execution_id).startsWith(prefix)))).slice(0, 14);
+      if (!runs.length) return '<div class="empty-state">No captured runs yet. Run the required experiment, then reload.</div>';
+      return runs.map(run => { const id = run.execution_id || "", suggested = prefixes.some(prefix => String(run.experiment_id || id).startsWith(prefix)); return `<label class="run-choice"><input type="checkbox" data-run-id="${escapeHtml(id)}" ${draft.runIds.has(id) ? "checked" : ""}><strong title="${escapeHtml(id)}">${escapeHtml(id)}</strong><span class="${suggested ? "suggested-mark" : ""}">${suggested ? "suggested" : escapeHtml(run.status || "")}</span></label>`; }).join("");
+    }
+
+    function bindSubmissionForm(activity) {
+      const draft = draftFor(activity.id);
+      document.getElementById("answer").addEventListener("input", event => { draft.answer = event.target.value; });
+      document.getElementById("evidence-paths").addEventListener("input", event => { draft.evidencePaths = event.target.value; });
+      document.querySelectorAll(".evidence-suggestion").forEach(button => button.addEventListener("click", () => { const paths = new Set(draft.evidencePaths.split("\n").map(item => item.trim()).filter(Boolean)); paths.add(button.dataset.path); draft.evidencePaths = [...paths].join("\n"); document.getElementById("evidence-paths").value = draft.evidencePaths; }));
+      document.querySelectorAll("[data-run-id]").forEach(input => input.addEventListener("change", event => { if (event.target.checked) draft.runIds.add(event.target.dataset.runId); else draft.runIds.delete(event.target.dataset.runId); }));
+      document.getElementById("grade-button").addEventListener("click", () => submitAttempt(activity));
+    }
+
+    async function submitAttempt(activity) {
+      const draft = draftFor(activity.id), button = document.getElementById("grade-button"), status = document.getElementById("submit-status");
+      button.disabled = true; button.innerHTML = '<span class="spinner"></span>Opus is grading…'; status.className = "submit-status"; status.textContent = "This can take a minute for code and run evidence.";
+      try {
+        const response = await fetch("/api/evaluate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activity_id: activity.id, answer: draft.answer, evidence_paths: draft.evidencePaths.split("\n").map(item => item.trim()).filter(Boolean), run_ids: [...draft.runIds] }) });
+        const result = await response.json();
+        if (!response.ok || result.error) throw new Error(result.error || `Grading failed (${response.status})`);
+        state.lastAttempt = result.attempt; state.learning = result.learning; renderAll(); showView("learn"); document.getElementById("result-container").scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (error) { button.disabled = false; button.textContent = "Grade this attempt"; status.className = "submit-status error"; status.textContent = error.message; }
+    }
+
+    function renderActivityList() {
+      document.getElementById("activity-list").innerHTML = state.learning.activities.map(activity => { const score = activity.best_score == null ? (activity.status === "locked" ? "·" : "") : activity.best_score; return `<button type="button" class="activity-button ${activity.id === state.currentActivityId ? "active" : ""} ${activity.status === "locked" ? "locked" : ""}" data-activity-id="${escapeHtml(activity.id)}"><span class="activity-week">W${activity.week}</span><span><strong>${escapeHtml(activity.title)}</strong><small>${escapeHtml(activity.kind)} · ${escapeHtml(activity.status.replace("_", " "))}</small></span><span class="activity-score">${score}</span></button>`; }).join("");
+      document.querySelectorAll("[data-activity-id]").forEach(button => button.addEventListener("click", () => { state.currentActivityId = button.dataset.activityId; state.lastAttempt = null; renderLearn(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
+    }
+
+    function renderResult(activity) {
+      const latest = state.lastAttempt?.activity_id === activity.id ? state.lastAttempt : state.learning.attempts.find(item => item.activity_id === activity.id), container = document.getElementById("result-container");
+      if (!latest) { container.innerHTML = ""; return; }
+      const passed = latest.score >= state.learning.course.pass_score, evidenceLabels = (latest.evidence || []).filter(item => item.status === "attached").map(item => item.label);
+      container.innerHTML = `<section class="card result-card"><div class="result-head"><div class="score-ring ${passed ? "" : "low"}">${latest.score}</div><div><span class="tag ${passed ? "success" : "danger"}">${escapeHtml(latest.verdict.replace("_", " "))}</span><h3>${passed ? "Strong evidence." : "Revise and resubmit."}</h3><p>${escapeHtml(latest.summary)}</p><div class="result-meta">${escapeHtml(latest.model)} · ${formatDate(latest.created_at)} · confidence ${Math.round(latest.confidence * 100)}%${evidenceLabels.length ? ` · ${evidenceLabels.length} artifact${evidenceLabels.length === 1 ? "" : "s"}` : ""}</div></div></div><div class="result-body"><table class="score-table"><thead><tr><th>Criterion</th><th>Evidence & gap</th><th>Score</th></tr></thead><tbody>${latest.rubric_results.map(item => `<tr><td><strong>${escapeHtml(item.criterion)}</strong></td><td>${escapeHtml(item.evidence)}${item.missing ? `<br><span style="color:var(--red)">Missing: ${escapeHtml(item.missing)}</span>` : ""}</td><td>${item.points}/${item.possible}</td></tr>`).join("")}</tbody></table><div class="feedback-grid"><div class="feedback-panel"><h4>What is working</h4>${renderList(latest.strengths)}</div><div class="feedback-panel gaps"><h4>What limits the grade</h4>${renderList(latest.gaps)}</div></div><div class="next-actions"><h4>Next actions</h4><ol>${latest.next_actions.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ol></div><div class="follow-up">${escapeHtml(latest.follow_up_question)}</div><div class="result-actions"><button class="secondary-button" id="retry-button" type="button">Revise this attempt</button>${passed && state.learning.next_activity_id && state.learning.next_activity_id !== activity.id ? '<button class="primary-button" id="continue-button" type="button">Continue to next challenge</button>' : ""}</div></div></section>`;
+      document.getElementById("retry-button").addEventListener("click", () => document.getElementById("answer")?.focus());
+      document.getElementById("continue-button")?.addEventListener("click", () => { state.currentActivityId = state.learning.next_activity_id; state.lastAttempt = null; renderLearn(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+    }
+
+    function renderProgress() {
+      const stats = state.learning.stats;
+      document.getElementById("stats-grid").innerHTML = [["Course grade", `${stats.overall_grade}/100`, "Best LLM-graded attempts, rubric weighted"], ["Mastery", `${stats.overall_mastery}%`, `${stats.mastered_skills} of ${stats.total_skills} skills mastered`], ["Activities passed", `${stats.passed_activities}/${stats.total_activities}`, `Pass line: ${state.learning.course.pass_score}`], ["Iterations", stats.attempts, "Every attempt remains auditable"]].map(item => `<div class="card stat-card"><span>${item[0]}</span><strong>${item[1]}</strong><small>${item[2]}</small></div>`).join("");
+      document.getElementById("week-table").innerHTML = `<thead><tr><th>Stage</th><th>Weight</th><th>Grade</th><th>Mastery</th><th>Passed</th><th>Status</th></tr></thead><tbody>${state.learning.weeks.map(week => `<tr><td><strong>W${week.id} · ${escapeHtml(week.title)}</strong></td><td>${week.weight}%</td><td><div class="inline-bar"><div class="inline-track"><div class="inline-fill" style="width:${week.grade}%"></div></div><span>${week.grade}</span></div></td><td>${week.mastery}%</td><td>${week.passed}/${week.total}</td><td>${escapeHtml(week.status.replace("_", " "))}</td></tr>`).join("")}</tbody>`;
+      document.getElementById("skills-grid").innerHTML = state.learning.skills.map(skill => `<article class="skill-card"><div class="skill-card-head"><h3>W${skill.week} · ${escapeHtml(skill.title)}</h3><strong>${skill.mastery_percent}%</strong></div><p>${escapeHtml(skill.description)}</p><div class="progress-track" style="background:#e7e3da"><div class="progress-fill" style="width:${skill.mastery_percent}%;background:${skill.status === "mastered" ? "var(--teal)" : "var(--amber)"}"></div></div><small>${skill.observations} observation${skill.observations === 1 ? "" : "s"} · ${escapeHtml(skill.status)}</small></article>`).join("");
+      document.getElementById("activity-table").innerHTML = `<thead><tr><th>Activity</th><th>Week</th><th>Status</th><th>Best</th><th>Latest</th><th>Attempts</th></tr></thead><tbody>${state.learning.activities.map(activity => `<tr><td><strong>${escapeHtml(activity.title)}</strong></td><td>W${activity.week}</td><td>${escapeHtml(activity.status.replace("_", " "))}</td><td class="num">${activity.best_score ?? "—"}</td><td class="num">${activity.last_score ?? "—"}</td><td class="num">${activity.attempt_count}</td></tr>`).join("")}</tbody>`;
+    }
+
+    function renderRuns() {
+      const list = document.getElementById("compare-run-list");
+      if (!state.learning.runs.length) list.innerHTML = '<div class="empty-state">No runs yet. Start with w0-smoke.</div>';
+      else list.innerHTML = state.learning.runs.map(run => { const id = run.execution_id, checked = state.selectedRuns.has(id) ? "checked" : ""; return `<label class="compare-run"><input type="checkbox" data-compare-id="${escapeHtml(id)}" ${checked}><span><strong>${escapeHtml(id)}</strong><small>${escapeHtml(run.topic || run.experiment_id || "run")} · ${((run.duration_seconds || 0) / 60).toFixed(1)} min · ${escapeHtml(run.status || "")}</small></span></label>`; }).join("");
+      document.querySelectorAll("[data-compare-id]").forEach(input => input.addEventListener("change", async event => { const id = event.target.dataset.compareId; if (event.target.checked && state.selectedRuns.size >= 6) { event.target.checked = false; return; } if (event.target.checked) { const response = await fetch(`/api/metrics?run=${encodeURIComponent(id)}`), metrics = await response.json(); state.selectedRuns.set(id, metrics); } else state.selectedRuns.delete(id); renderRunChart(); }));
+      renderRunChart();
+    }
+
+    function renderRunChart() {
+      const chartWrap = document.getElementById("chart-wrap"), runTable = document.getElementById("run-table");
+      const series = [...state.selectedRuns.entries()].map(([id, metrics]) => ({ id, points: Array.isArray(metrics) ? metrics.filter(metric => metric.name === state.metric).map(metric => ({ x: metric.step, y: metric.value })) : [] })).filter(item => item.points.length);
+      if (!series.length) { chartWrap.innerHTML = `<div class="empty-state">No ${escapeHtml(metricLabel())} observations in the selected runs.</div>`; runTable.innerHTML = ""; return; }
+      const width = Math.max(340, chartWrap.clientWidth - 36), height = 350, margin = { top: 18, right: 22, bottom: 48, left: 68 }, all = series.flatMap(item => item.points), xMin = Math.min(...all.map(p => p.x)), xMax = Math.max(...all.map(p => p.x)), yRawMin = Math.min(...all.map(p => p.y)), yRawMax = Math.max(...all.map(p => p.y)), yPad = Math.max((yRawMax - yRawMin) * .08, Math.abs(yRawMax || 1) * .01), yMin = yRawMin - yPad, yMax = yRawMax + yPad;
+      const x = value => margin.left + (value - xMin) / Math.max(1, xMax - xMin) * (width - margin.left - margin.right), y = value => height - margin.bottom - (value - yMin) / Math.max(Number.EPSILON, yMax - yMin) * (height - margin.top - margin.bottom);
       let grid = "";
-      for (let index = 0; index <= ticks; index += 1) {
-        const value = yMin + (yMax - yMin) * index / ticks;
-        const py = y(value);
-        grid += `<line class="grid" x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}"></line>`;
-        grid += `<text class="tick" x="${margin.left - 9}" y="${py + 4}" text-anchor="end">${format(value)}</text>`;
-      }
-      const paths = series.map((item, index) => {
-        const d = item.points.sort((a, b) => a.x - b.x).map((point, pointIndex) => `${pointIndex ? "L" : "M"}${x(point.x)},${y(point.y)}`).join(" ");
-        const dots = item.points.map(point => `<circle cx="${x(point.x)}" cy="${y(point.y)}" r="3" fill="${palette[index]}"><title>${escapeHtml(item.id)} · step ${point.x}: ${format(point.y)}</title></circle>`).join("");
-        return `<path d="${d}" fill="none" stroke="${palette[index]}" stroke-width="2.5"></path>${dots}`;
-      }).join("");
-      const legend = series.map((item, index) => `<span style="--series:${palette[index]}">${escapeHtml(item.id)}</span>`).join("");
-      chartWrap.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(metricLabel())} by training step">
-        ${grid}
-        <line class="axis" x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}"></line>
-        <line class="axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}"></line>
-        ${paths}
-        <text class="axis-label" x="${(margin.left + width - margin.right) / 2}" y="${height - 10}" text-anchor="middle">Training step</text>
-        <text class="axis-label" transform="translate(18 ${(margin.top + height - margin.bottom) / 2}) rotate(-90)" text-anchor="middle">${escapeHtml(metricLabel())}</text>
-      </svg><div class="legend">${legend}</div>`;
+      for (let index = 0; index <= 5; index += 1) { const value = yMin + (yMax - yMin) * index / 5, py = y(value); grid += `<line class="grid" x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}"></line><text class="tick" x="${margin.left - 8}" y="${py + 4}" text-anchor="end">${formatNumber(value)}</text>`; }
+      const paths = series.map((item, index) => { const ordered = [...item.points].sort((a,b) => a.x - b.x), d = ordered.map((p,i) => `${i ? "L" : "M"}${x(p.x)},${y(p.y)}`).join(" "), dots = ordered.map(p => `<circle cx="${x(p.x)}" cy="${y(p.y)}" r="2.7" fill="${palette[index]}"><title>${escapeHtml(item.id)} · step ${p.x}: ${formatNumber(p.y)}</title></circle>`).join(""); return `<path d="${d}" fill="none" stroke="${palette[index]}" stroke-width="2.4"></path>${dots}`; }).join("");
+      chartWrap.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(metricLabel())} by training step">${grid}<line class="axis" x1="${margin.left}" y1="${height-margin.bottom}" x2="${width-margin.right}" y2="${height-margin.bottom}"></line><line class="axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height-margin.bottom}"></line>${paths}<text class="axis-label" x="${(margin.left+width-margin.right)/2}" y="${height-8}" text-anchor="middle">Training step</text></svg><div class="legend">${series.map((item,index) => `<span style="--series:${palette[index]}">${escapeHtml(item.id)}</span>`).join("")}</div>`;
+      const runById = new Map(state.learning.runs.map(run => [run.execution_id, run]));
+      runTable.innerHTML = `<section class="card panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Run</th><th>Topic</th><th>Final</th><th>Best</th><th>Minutes</th></tr></thead><tbody>${series.map(item => { const values = item.points.map(point => point.y), run = runById.get(item.id) || {}; return `<tr><td>${escapeHtml(item.id)}</td><td>${escapeHtml(run.topic || "—")}</td><td class="num">${formatNumber(values.at(-1))}</td><td class="num">${formatNumber(Math.min(...values))}</td><td class="num">${((run.duration_seconds || 0)/60).toFixed(1)}</td></tr>`; }).join("")}</tbody></table></div></section>`;
     }
 
-    function drawTable(series) {
-      const runById = new Map(state.runs.map(run => [run.execution_id, run]));
-      const rows = series.map(item => {
-        const values = item.points.map(point => point.y);
-        const run = runById.get(item.id) || {};
-        return `<tr><td>${escapeHtml(item.id)}</td><td>${escapeHtml(run.topic || "—")}</td><td class="num">${format(values[values.length - 1])}</td><td class="num">${format(Math.min(...values))}</td><td class="num">${((run.duration_seconds || 0) / 60).toFixed(1)}</td></tr>`;
-      }).join("");
-      tableWrap.innerHTML = `<table><thead><tr><th>Run</th><th>Topic</th><th>Final</th><th>Minimum</th><th>Minutes</th></tr></thead><tbody>${rows}</tbody></table>`;
+    function renderHistory() {
+      const container = document.getElementById("history-list");
+      if (!state.learning.attempts.length) { container.innerHTML = '<div class="empty-state">Your first Opus assessment will appear here. Attempts are append-only.</div>'; return; }
+      container.innerHTML = state.learning.attempts.map(attempt => `<details class="history-attempt"><summary><span class="history-score ${attempt.score >= state.learning.course.pass_score ? "" : "low"}">${attempt.score}</span><span><h3>${escapeHtml(activityTitle(attempt.activity_id))}</h3><small>${formatDate(attempt.created_at)} · ${escapeHtml(attempt.verdict.replace("_", " "))}</small></span><small>${escapeHtml(attempt.model)}</small></summary><div class="history-body"><p>${escapeHtml(attempt.summary)}</p><h4>Your answer</h4><div class="history-answer">${escapeHtml(attempt.answer || "[No written answer]")}</div><h4>Next actions</h4><ol>${attempt.next_actions.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ol><h4>Evidence</h4><p>${(attempt.evidence || []).map(item => `${escapeHtml(item.label)} (${escapeHtml(item.status)})`).join(" · ") || "No external artifacts"}</p><p><small>${attempt.usage?.input_tokens || 0} input tokens · ${attempt.usage?.output_tokens || 0} output tokens · ${attempt.latency_seconds || 0}s · confidence ${Math.round(attempt.confidence * 100)}%</small></p></div></details>`).join("");
     }
 
-    function metricLabel() {
-      return metricSelect.options[metricSelect.selectedIndex].text;
-    }
-    function format(value) {
-      if (!Number.isFinite(value)) return "—";
-      if (Math.abs(value) >= 1000) return Math.round(value).toLocaleString();
-      return Number(value).toPrecision(5).replace(/\.?0+$/, "");
-    }
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
-    }
+    function activityTitle(id) { return state.learning.activities.find(item => item.id === id)?.title || id; }
+    function metricLabel() { const select = document.getElementById("metric-select"); return select.options[select.selectedIndex].text; }
+    function renderList(items) { return items?.length ? `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "<p>No items reported.</p>"; }
+    function formatDate(value) { try { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); } catch { return value; } }
+    function formatNumber(value) { if (!Number.isFinite(value)) return "—"; if (Math.abs(value) >= 1000) return Math.round(value).toLocaleString(); return Number(value).toPrecision(5).replace(/\.?0+$/, ""); }
+    function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]); }
   </script>
 </body>
 </html>

@@ -69,6 +69,44 @@ python -m llm_lab compare RUN_ID_A RUN_ID_B --output llm_lab/student/comparison.
 python -m llm_lab dashboard --open
 ```
 
+## Adaptive LLM assessment
+
+The dashboard is also the primary learning interface. It selects the next unlocked
+challenge, accepts a written defense plus explicit workspace paths and run IDs,
+and asks Anthropic to grade the submission against the course rubric. The API key
+stays in the Python server process and is never sent to the browser.
+
+```bash
+export ANTHROPIC_API_KEY=your_key
+python -m llm_lab dashboard --open
+```
+
+By default the evaluator uses `claude-opus-5` with high effort. You may override
+those choices without changing course code:
+
+```bash
+export LLM_LAB_GRADER_MODEL=claude-opus-5
+export LLM_LAB_GRADER_EFFORT=high
+```
+
+The mastery path contains 15 gated assessments over 18 skills. A score of 85
+passes an activity; skill mastery uses repeated per-skill evidence, so one lucky
+answer is not enough. Every attempt is appended to
+`~/.cache/nanochat/lab_learning/attempts.jsonl`, including rubric scores,
+feedback, evidence hashes, model metadata, and token usage. Set
+`NANOCHAT_LEARNING_DIR` to change that location.
+
+The dashboard includes four surfaces:
+
+- **Learn:** answer the adaptive challenge and attach code, reports, and runs.
+- **Progress:** inspect weighted course grades, week gates, and skill mastery.
+- **Runs:** compare captured learning curves and compute metrics.
+- **History:** audit every answer, grade, feedback record, and evaluator call.
+
+`python -m llm_lab grade` prints the LLM-assessed transcript. The older
+file/run checklist remains available as `python -m llm_lab audit`; it is not a
+substantive grade.
+
 Run identifiers may be shortened to any unique prefix.
 
 For post-training, pass the exact parent run:
@@ -113,10 +151,11 @@ Never call a fixed-step architecture comparison “compute matched.” A wider, 
 
 Read [SYLLABUS.md](SYLLABUS.md), then complete assignments in order. Week 2 is a menu: run all cheap native ablations, implement at least four architecture/optimization contracts, and select at least three effects for longer confirmation. Weeks 3–5 use the strongest justified checkpoint—not automatically the lowest pilot BPB.
 
-The manual standard is defined in [RUBRIC.md](RUBRIC.md). The CLI completion audit is only a checklist:
+The manual standard is defined in [RUBRIC.md](RUBRIC.md). The LLM evaluator uses
+that standard for every submission. The CLI completion audit is only a checklist:
 
 ```bash
-python -m llm_lab grade
+python -m llm_lab audit
 ```
 
 ## Guardrails
