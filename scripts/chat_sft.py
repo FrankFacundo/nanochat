@@ -37,6 +37,12 @@ parser = argparse.ArgumentParser(description="Supervised fine-tuning (SFT) the m
 parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('dummy' disables wandb logging)")
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
+parser.add_argument(
+    "--compile",
+    action=argparse.BooleanOptionalAction,
+    default=None,
+    help="compile the model (default: enabled on CUDA, disabled on CPU/MPS)",
+)
 # Model loading
 parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
@@ -70,9 +76,16 @@ user_config = vars(args).copy()
 
 # Compute init
 device_type = autodetect_device_type() if args.device_type == "" else args.device_type
+if args.compile is None:
+    # PyTorch 2.9's Inductor path can consume unbounded host memory while compiling
+    # this SFT graph for MPS. Keep the optimized path on CUDA and use eager mode on
+    # CPU/MPS by default; --compile remains available for explicit experiments.
+    args.compile = device_type == "cuda"
+    user_config["compile"] = args.compile
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init(device_type)
 master_process = ddp_rank == 0
 print0(f"COMPUTE_DTYPE: {COMPUTE_DTYPE} ({COMPUTE_DTYPE_REASON})")
+print0(f"torch.compile: {'enabled' if args.compile else 'disabled'}")
 synchronize = torch.cuda.synchronize if device_type == "cuda" else lambda: None
 get_max_memory = torch.cuda.max_memory_allocated if device_type == "cuda" else lambda: 0
 if device_type == "cuda":
@@ -115,7 +128,8 @@ for name, fallback, source in [
         print0(f"Using {name}={arg_val}")
 
 orig_model = model
-model = torch.compile(model, dynamic=False)
+if args.compile:
+    model = torch.compile(model, dynamic=False)
 depth = model.config.n_layer
 num_flops_per_token = model.estimate_flops()
 tokens_per_fwdbwd = args.device_batch_size * args.max_seq_len # tokens per iteration for a single rank
