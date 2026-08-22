@@ -1,0 +1,631 @@
+{
+  "version": 1,
+  "defaults": {
+    "base": {
+      "depth": 6,
+      "aspect_ratio": 64,
+      "head_dim": 64,
+      "window_pattern": "L",
+      "max_seq_len": 512,
+      "device_batch_size": 32,
+      "total_batch_size": 16384,
+      "num_iterations": 600,
+      "eval_every": 100,
+      "eval_tokens": 131072,
+      "core_metric_every": -1,
+      "sample_every": -1,
+      "save_every": -1
+    },
+    "sft": {
+      "num_iterations": 600,
+      "eval_every": 200,
+      "eval_tokens": 131072,
+      "chatcore_every": -1
+    },
+    "rl": {
+      "num_epochs": 1,
+      "device_batch_size": 4,
+      "examples_per_step": 4,
+      "num_samples": 4,
+      "max_new_tokens": 128,
+      "eval_every": 120,
+      "eval_examples": 40,
+      "save_every": 120
+    }
+  },
+  "experiments": [
+    {
+      "id": "w0-smoke",
+      "title": "End-to-end instrumentation smoke test",
+      "week": 0,
+      "topic": "instrumentation",
+      "stage": "base",
+      "tier": "smoke",
+      "estimated_minutes": 2,
+      "question": "Can the complete experimental pipeline train, evaluate, checkpoint, and capture metrics without contaminating the shared baseline?",
+      "hypothesis_prompt": "List the files and metrics that must exist for this run to count as valid.",
+      "args": {
+        "num_iterations": 30,
+        "eval_every": 15,
+        "eval_tokens": 32768
+      }
+    },
+    {
+      "id": "w1-pilot",
+      "title": "Short d6 control",
+      "week": 1,
+      "topic": "baseline",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "What do healthy loss, validation BPB, throughput, and early samples look like under the standard d6 configuration?",
+      "hypothesis_prompt": "Predict validation BPB at steps 0, 100, 300, and 600 and define an instability threshold.",
+      "args": {}
+    },
+    {
+      "id": "w1-baseline",
+      "title": "Full M3 Max d6 baseline",
+      "week": 1,
+      "topic": "baseline",
+      "stage": "base",
+      "tier": "confirm",
+      "estimated_minutes": 40,
+      "question": "What performance does the official Mac-scale training budget establish as the course control?",
+      "hypothesis_prompt": "Pre-register final validation BPB, throughput range, and two qualitative capabilities before launching.",
+      "args": {
+        "num_iterations": 5000,
+        "eval_tokens": 524288,
+        "sample_every": 500
+      },
+      "eval_args": {
+        "device_batch_size": 1,
+        "split_tokens": 16384,
+        "max_per_task": 16
+      }
+    },
+    {
+      "id": "w1-vocab-8192",
+      "title": "Tokenizer vocabulary 8K",
+      "week": 1,
+      "topic": "tokenizer-vocab",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 7,
+      "question": "Does a smaller vocabulary improve parameter efficiency enough to offset longer token sequences at fixed token budget?",
+      "hypothesis_prompt": "Predict compression ratio, embedding parameter count, BPB, and why token-count comparisons alone are invalid.",
+      "tokenizer_args": {
+        "max_chars": 500000000,
+        "vocab_size": 8192
+      },
+      "args": {}
+    },
+    {
+      "id": "w1-vocab-16384",
+      "title": "Tokenizer vocabulary 16K",
+      "week": 1,
+      "topic": "tokenizer-vocab",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 7,
+      "question": "Is 16K vocabulary a better compression/capacity compromise than 8K and 32K at this scale?",
+      "hypothesis_prompt": "State the expected ordering for bytes/token, model parameters, step time, and validation BPB.",
+      "tokenizer_args": {
+        "max_chars": 500000000,
+        "vocab_size": 16384
+      },
+      "args": {}
+    },
+    {
+      "id": "w1-vocab-32768",
+      "title": "Tokenizer vocabulary 32K",
+      "week": 1,
+      "topic": "tokenizer-vocab",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 7,
+      "question": "Does 32K vocabulary earn enough compression to justify its embedding and value-embedding parameter cost at this model scale?",
+      "hypothesis_prompt": "Predict compression, parameter count, bytes processed at a fixed token budget, and validation BPB against the 8K and 16K conditions.",
+      "tokenizer_args": {
+        "max_chars": 500000000,
+        "vocab_size": 32768
+      },
+      "args": {}
+    },
+    {
+      "id": "w2-lr-half",
+      "title": "Global learning-rate scale 0.5x",
+      "week": 2,
+      "topic": "learning-rate",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "Does halving every optimizer-group learning rate improve stability at the cost of slower learning?",
+      "hypothesis_prompt": "Predict early slope, final BPB, and whether 600 steps is long enough to judge the lower rate.",
+      "args": {
+        "embedding_lr": 0.15,
+        "unembedding_lr": 0.004,
+        "matrix_lr": 0.01,
+        "scalar_lr": 0.25
+      }
+    },
+    {
+      "id": "w2-lr-double",
+      "title": "Global learning-rate scale 2x",
+      "week": 2,
+      "topic": "learning-rate",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "Does doubling every optimizer-group learning rate converge faster without instability?",
+      "hypothesis_prompt": "Define a divergence criterion using both loss and validation BPB before running.",
+      "args": {
+        "embedding_lr": 0.6,
+        "unembedding_lr": 0.016,
+        "matrix_lr": 0.04,
+        "scalar_lr": 1.0
+      }
+    },
+    {
+      "id": "w2-warmup-zero",
+      "title": "No learning-rate warmup",
+      "week": 2,
+      "topic": "warmup",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "Is warmup necessary for this small model and optimizer at batch size 16K tokens?",
+      "hypothesis_prompt": "Predict the first 50 steps and distinguish transient instability from permanent damage.",
+      "args": {
+        "warmup_steps": 0
+      }
+    },
+    {
+      "id": "w2-warmup-long",
+      "title": "Long 200-step warmup",
+      "week": 2,
+      "topic": "warmup",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "Does a warmup consuming one third of a short budget protect optimization or waste scarce updates?",
+      "hypothesis_prompt": "Predict crossover step versus the standard 40-step warmup.",
+      "args": {
+        "warmup_steps": 200
+      }
+    },
+    {
+      "id": "w2-schedule-family",
+      "title": "Constant vs linear-warmdown vs cosine schedule",
+      "week": 2,
+      "topic": "schedule",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 8,
+      "question": "At equal update count and peak learning rate, which schedule gives the best final BPB and which gives the best anytime performance?",
+      "hypothesis_prompt": "Sketch all three multiplier curves and pre-register area-under-curve and final-BPB predictions.",
+      "implementation_contract": {
+        "cli": "Add --lr-schedule with choices linear, cosine, constant; preserve linear as default.",
+        "files": ["scripts/base_train.py"],
+        "invariants": ["warmup semantics unchanged", "final_lr_frac honored for linear and cosine", "constant means multiplier 1 after warmup"],
+        "test": "Unit-test multipliers at start, warmup boundary, midpoint, and final step."
+      }
+    },
+    {
+      "id": "w2-optimizer-adamw-muon",
+      "title": "All-AdamW vs hybrid Muon/AdamW",
+      "week": 2,
+      "topic": "optimizer",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 8,
+      "question": "Does Muon improve quality per step, quality per wall-clock minute, or both?",
+      "hypothesis_prompt": "Specify which parameter groups are controlled, how learning rates are tuned fairly, and what optimizer state memory you expect.",
+      "implementation_contract": {
+        "cli": "Add --optimizer with choices hybrid_muon and adamw.",
+        "files": ["nanochat/gpt.py", "scripts/base_train.py"],
+        "invariants": ["non-matrix groups remain identical", "parameter initialization and data order are unchanged", "log optimizer name and peak memory"],
+        "test": "Verify every trainable parameter appears in exactly one optimizer group for both choices."
+      }
+    },
+    {
+      "id": "w2-wd-zero",
+      "title": "Zero matrix weight decay",
+      "week": 2,
+      "topic": "weight-decay",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "Does regularization help within a short, undertrained regime?",
+      "hypothesis_prompt": "Predict train loss, validation BPB, and weight-norm direction separately.",
+      "args": {
+        "weight_decay": 0.0
+      }
+    },
+    {
+      "id": "w2-wd-double",
+      "title": "Double matrix weight decay",
+      "week": 2,
+      "topic": "weight-decay",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "When does stronger decay become underfitting rather than useful regularization?",
+      "hypothesis_prompt": "Explain the repository's automatic weight-decay scaling before predicting the result.",
+      "args": {
+        "weight_decay": 0.56
+      }
+    },
+    {
+      "id": "w2-gradient-clipping",
+      "title": "Gradient clipping threshold sweep",
+      "week": 2,
+      "topic": "gradient-clipping",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 8,
+      "question": "Does clipping prevent rare destructive updates, or does it continuously shrink useful gradients?",
+      "hypothesis_prompt": "Choose thresholds only after measuring the unclipped gradient-norm distribution.",
+      "implementation_contract": {
+        "cli": "Add --grad-clip where -1 disables clipping and positive values are global-norm thresholds.",
+        "files": ["scripts/base_train.py"],
+        "invariants": ["clip after gradient accumulation", "clip after scaler.unscale_ for fp16", "log pre-clip norm and clipped fraction"],
+        "test": "Construct a deterministic two-parameter model and verify the post-clip global norm."
+      }
+    },
+    {
+      "id": "w2-batch-8192",
+      "title": "8K-token total batch",
+      "week": 2,
+      "topic": "batch-size",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "How does a smaller batch change noise, update count per token, and throughput?",
+      "hypothesis_prompt": "Explain why nanochat's automatic LR scaling makes this a training-policy comparison, not a pure batch-only intervention.",
+      "args": {
+        "device_batch_size": 16,
+        "total_batch_size": 8192
+      }
+    },
+    {
+      "id": "w2-batch-32768",
+      "title": "32K-token total batch",
+      "week": 2,
+      "topic": "batch-size",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 11,
+      "question": "Does doubling batch tokens improve hardware use enough to compensate for half as many parameter updates at fixed steps?",
+      "hypothesis_prompt": "State whether you will compare fixed steps, fixed tokens, or fixed wall-clock—and why.",
+      "args": {
+        "device_batch_size": 32,
+        "total_batch_size": 32768
+      }
+    },
+    {
+      "id": "w2-tokens-1250",
+      "title": "Quarter training horizon",
+      "week": 2,
+      "topic": "training-tokens",
+      "stage": "base",
+      "tier": "confirm",
+      "estimated_minutes": 11,
+      "question": "What fraction of final baseline quality is acquired in the first quarter of tokens?",
+      "hypothesis_prompt": "Predict final BPB and marginal BPB improvement per million tokens.",
+      "args": {
+        "num_iterations": 1250,
+        "eval_tokens": 524288
+      }
+    },
+    {
+      "id": "w2-tokens-10000",
+      "title": "Double training horizon",
+      "week": 2,
+      "topic": "training-tokens",
+      "stage": "base",
+      "tier": "confirm",
+      "estimated_minutes": 80,
+      "question": "Does the d6 model remain data-limited at 5K steps, and what is the marginal return of another 81.9M tokens?",
+      "hypothesis_prompt": "Estimate the power-law improvement and define an early-stop rule from the validation curve.",
+      "args": {
+        "num_iterations": 10000,
+        "eval_every": 250,
+        "eval_tokens": 524288
+      }
+    },
+    {
+      "id": "w2-depth8-fixed-width",
+      "title": "Eight layers at approximately fixed width",
+      "week": 2,
+      "topic": "depth-width",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 8,
+      "question": "At similar residual width, does added depth improve quality enough to justify extra FLOPs?",
+      "hypothesis_prompt": "Calculate n_embd, heads, approximate parameter change, and expected step-time change before running.",
+      "args": {
+        "depth": 8,
+        "aspect_ratio": 48,
+        "head_dim": 64
+      }
+    },
+    {
+      "id": "w2-width512-fixed-depth",
+      "title": "Width 512 at six layers",
+      "week": 2,
+      "topic": "depth-width",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 9,
+      "question": "At fixed depth, how does extra width compare with added depth under a short budget?",
+      "hypothesis_prompt": "Compare at fixed steps, then explain why a fixed-FLOP follow-up is required.",
+      "args": {
+        "depth": 6,
+        "aspect_ratio": 85,
+        "head_dim": 64
+      }
+    },
+    {
+      "id": "w2-heads-4",
+      "title": "Four attention heads at width 384",
+      "week": 2,
+      "topic": "attention-heads",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "At fixed residual width, does using fewer, wider heads change optimization or representation quality?",
+      "hypothesis_prompt": "Calculate head dimension and identify which parameter matrices do and do not change size.",
+      "args": {
+        "head_dim": 96
+      }
+    },
+    {
+      "id": "w2-heads-3",
+      "title": "Three attention heads at width 384",
+      "week": 2,
+      "topic": "attention-heads",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 6,
+      "question": "How far can head count fall before reduced attention diversity hurts BPB?",
+      "hypothesis_prompt": "Predict whether quality or throughput will move measurably at this scale.",
+      "args": {
+        "head_dim": 128
+      }
+    },
+    {
+      "id": "w2-mlp-ratio",
+      "title": "MLP expansion-ratio sweep",
+      "week": 2,
+      "topic": "mlp-ratio",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 9,
+      "question": "At fixed depth and width, how should capacity be allocated between attention and feed-forward computation?",
+      "hypothesis_prompt": "Compare ratios 2, 4, and 8 at fixed steps and then at approximately fixed FLOPs.",
+      "implementation_contract": {
+        "cli": "Add --mlp-ratio and persist it in GPTConfig/checkpoints.",
+        "files": ["nanochat/gpt.py", "scripts/base_train.py", "nanochat/checkpoint_manager.py"],
+        "invariants": ["default ratio remains 4", "parameter counts and FLOP estimate reflect the ratio"],
+        "test": "Assert c_fc and c_proj shapes for ratios 2, 4, and 8."
+      }
+    },
+    {
+      "id": "w2-context-256",
+      "title": "Context length 256",
+      "week": 2,
+      "topic": "context-length",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 5,
+      "question": "At fixed tokens per update, does shorter context improve throughput at an unacceptable modeling cost?",
+      "hypothesis_prompt": "Predict throughput, number of independent sequences per batch, and held-out BPB.",
+      "args": {
+        "max_seq_len": 256,
+        "device_batch_size": 64
+      }
+    },
+    {
+      "id": "w2-context-1024",
+      "title": "Context length 1024",
+      "week": 2,
+      "topic": "context-length",
+      "stage": "base",
+      "tier": "pilot",
+      "estimated_minutes": 10,
+      "question": "At fixed tokens per update, does longer context improve BPB enough to justify quadratic attention cost?",
+      "hypothesis_prompt": "Predict the throughput ratio using attention complexity, then explain deviations caused by MLP and overhead.",
+      "args": {
+        "max_seq_len": 1024,
+        "device_batch_size": 16
+      }
+    },
+    {
+      "id": "w2-tied-embeddings",
+      "title": "Tied vs untied token embeddings",
+      "week": 2,
+      "topic": "tied-embeddings",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 7,
+      "question": "Does sharing input and output embeddings improve parameter efficiency or constrain useful specialization?",
+      "hypothesis_prompt": "Account for initialization, optimizer grouping, parameter count, and checkpoint aliasing.",
+      "implementation_contract": {
+        "cli": "Add --tie-embeddings and persist it in GPTConfig.",
+        "files": ["nanochat/gpt.py", "scripts/base_train.py", "nanochat/checkpoint_manager.py"],
+        "invariants": ["one Parameter object when tied", "no double optimizer update", "default remains untied"],
+        "test": "Check data_ptr equality when tied and inequality when untied."
+      }
+    },
+    {
+      "id": "w2-norm-placement",
+      "title": "RMSNorm placement study",
+      "week": 2,
+      "topic": "norm-placement",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 9,
+      "question": "How do pre-norm, post-norm, and embedding normalization affect gradient flow and stability?",
+      "hypothesis_prompt": "Draw each residual path and predict gradient-norm behavior before coding.",
+      "implementation_contract": {
+        "cli": "Add --norm-placement with choices pre, post, and pre_plus_embedding.",
+        "files": ["nanochat/gpt.py", "scripts/base_train.py"],
+        "invariants": ["current behavior is preserved by pre_plus_embedding", "each path applies exactly the intended norms"],
+        "test": "Use hooks to count norm calls and verify tensor shapes for every mode."
+      }
+    },
+    {
+      "id": "w2-activation-family",
+      "title": "ReLU-squared vs GELU vs SwiGLU",
+      "week": 2,
+      "topic": "activation",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 10,
+      "question": "Which activation gives the best quality per parameter and per FLOP at Mac scale?",
+      "hypothesis_prompt": "The current baseline is ReLU-squared, not GELU. Choose hidden sizes that make both raw and parameter-matched comparisons possible.",
+      "implementation_contract": {
+        "cli": "Add --activation with choices relu2, gelu, swiglu.",
+        "files": ["nanochat/gpt.py", "scripts/base_train.py"],
+        "invariants": ["relu2 exactly preserves current behavior", "SwiGLU has separate gate/value projections", "FLOP estimate is updated"],
+        "test": "Verify output shapes, parameter counts, and finite backward passes for all choices."
+      }
+    },
+    {
+      "id": "w2-rope",
+      "title": "RoPE base and rotated-fraction study",
+      "week": 2,
+      "topic": "rope",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 8,
+      "question": "How do RoPE frequency choices interact with training context and length extrapolation?",
+      "hypothesis_prompt": "Predict in-distribution BPB separately from evaluation beyond the training context.",
+      "implementation_contract": {
+        "cli": "Add --rope-base and --rope-fraction, persisted in GPTConfig.",
+        "files": ["nanochat/gpt.py", "scripts/base_train.py", "nanochat/checkpoint_manager.py"],
+        "invariants": ["default base 100000 and fraction 1 preserve current behavior", "unrotated channels pass through unchanged"],
+        "test": "Verify relative-position identity, cache shape, and forward pass at train and extrapolation lengths."
+      }
+    },
+    {
+      "id": "w2-data-mixture",
+      "title": "Data quality and mixture intervention",
+      "week": 2,
+      "topic": "data-mixture",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 10,
+      "question": "Can a smaller, higher-quality or domain-targeted mixture outperform more generic tokens on the metrics that matter?",
+      "hypothesis_prompt": "Define mixture provenance, deduplication, contamination checks, and both general and domain evaluations before training.",
+      "implementation_contract": {
+        "cli": "Add a data manifest argument rather than hard-coding source paths.",
+        "files": ["nanochat/dataset.py", "nanochat/dataloader.py", "scripts/base_train.py"],
+        "invariants": ["validation data is fixed and excluded from every mixture", "sampling weights are logged", "document boundaries are preserved"],
+        "test": "On a synthetic two-source corpus, verify empirical sampling weights and zero validation overlap."
+      }
+    },
+    {
+      "id": "w3-sft-baseline",
+      "title": "Supervised fine-tuning baseline",
+      "week": 3,
+      "topic": "sft",
+      "stage": "sft",
+      "tier": "confirm",
+      "estimated_minutes": 10,
+      "question": "Which behaviors improve after SFT, and what base-model behavior or knowledge regresses?",
+      "hypothesis_prompt": "Choose one held-out loss metric, one format-following metric, and one capability metric before training.",
+      "requires": ["w1-baseline"],
+      "args": {
+        "num_iterations": 1500,
+        "eval_tokens": 524288,
+        "chatcore_every": 500,
+        "chatcore_max_cat": 32,
+        "chatcore_max_sample": 8
+      }
+    },
+    {
+      "id": "w3-sft-math-heavy",
+      "title": "Math-heavy SFT mixture",
+      "week": 3,
+      "topic": "data-mixture",
+      "stage": "sft",
+      "tier": "confirm",
+      "estimated_minutes": 10,
+      "question": "How does increasing GSM8K exposure trade mathematical behavior against broader instruction following?",
+      "hypothesis_prompt": "Predict GSM8K, categorical ChatCORE, and validation BPB changes; define catastrophic forgetting.",
+      "requires": ["w1-baseline"],
+      "args": {
+        "num_iterations": 1500,
+        "gsm8k_epochs": 8,
+        "mmlu_epochs": 1,
+        "eval_tokens": 524288,
+        "chatcore_every": 500,
+        "chatcore_max_cat": 32,
+        "chatcore_max_sample": 8
+      }
+    },
+    {
+      "id": "w4-dpo",
+      "title": "Implement and validate DPO",
+      "week": 4,
+      "topic": "preference-optimization",
+      "stage": "design",
+      "tier": "implementation",
+      "estimated_minutes": 12,
+      "question": "How do preference strength, beta, and rejected-response quality alter alignment and capability retention?",
+      "hypothesis_prompt": "Derive the DPO loss from the policy/reference log-ratio and identify every tensor that must be detached.",
+      "implementation_contract": {
+        "cli": "Create scripts/chat_dpo.py with --beta, --num-iterations, and explicit train/validation preference files.",
+        "files": ["scripts/chat_dpo.py", "tasks/common.py"],
+        "invariants": ["frozen reference model", "chosen/rejected share prompt", "held-out preferences never train", "log preference accuracy and KL proxy"],
+        "test": "Hand-compute a two-pair batch and match the implementation loss and gradient signs."
+      }
+    },
+    {
+      "id": "w5-rl-baseline",
+      "title": "GSM8K policy-gradient baseline",
+      "week": 5,
+      "topic": "reinforcement-learning",
+      "stage": "rl",
+      "tier": "confirm",
+      "estimated_minutes": 45,
+      "question": "Does on-policy verifiable-reward training improve pass@1 rather than merely pass@k or response length?",
+      "hypothesis_prompt": "Predict reward, pass@1, pass@4, sequence length, and one plausible reward-hacking behavior.",
+      "requires": ["w3-sft-baseline"],
+      "args": {}
+    },
+    {
+      "id": "w5-rl-samples8",
+      "title": "RL group size eight",
+      "week": 5,
+      "topic": "reinforcement-learning",
+      "stage": "rl",
+      "tier": "confirm",
+      "estimated_minutes": 80,
+      "question": "Does a larger within-question sample group improve the advantage signal enough to justify rollout cost?",
+      "hypothesis_prompt": "Compare reward variance, usable nonzero advantages, wall-clock time, and pass@1.",
+      "requires": ["w3-sft-baseline"],
+      "args": {
+        "device_batch_size": 4,
+        "num_samples": 8
+      }
+    },
+    {
+      "id": "w6-parameter-golf",
+      "title": "M3 Max Parameter Golf capstone",
+      "week": 6,
+      "topic": "capstone",
+      "stage": "design",
+      "tier": "capstone",
+      "estimated_minutes": 30,
+      "question": "What combination of independently validated interventions minimizes held-out BPB under a fixed 30-minute wall-clock budget?",
+      "hypothesis_prompt": "Freeze hardware, data, evaluation, timer boundary, and artifact-size rule before selecting interventions.",
+      "implementation_contract": {
+        "deliverables": ["pre-registration", "at least three baselines", "factorial or staged ablation table", "final checkpoint", "reproducible command", "model card", "negative results appendix"],
+        "constraint": "30 minutes measured training time on this M3 Max; no external compute; fixed validation split.",
+        "grading": "40% rigor, 25% BPB, 15% reproducibility, 10% efficiency analysis, 10% communication."
+      }
+    }
+  ]
+}

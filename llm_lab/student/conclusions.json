@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "conclusions": [
+    {
+      "topic": "TODO",
+      "execution_ids": ["TODO"],
+      "observation": "TODO",
+      "effect_size": "TODO",
+      "compute_tradeoff": "TODO",
+      "mechanistic_interpretation": "TODO",
+      "alternative_explanation": "TODO",
+      "evidence_strength": "observation | tentative | confirmed",
+      "next_falsifying_experiment": "TODO"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "predictions": [
+    {
+      "experiment_id": "TODO",
+      "timestamp_before_run": "TODO",
+      "question": "TODO",
+      "mechanism": "TODO",
+      "directional_prediction": "TODO",
+      "primary_metric": "TODO",
+      "minimum_meaningful_effect": "TODO",
+      "falsifier": "TODO",
+      "failure_rule": "TODO",
+      "known_confound": "TODO"
+    }
+  ]
+}

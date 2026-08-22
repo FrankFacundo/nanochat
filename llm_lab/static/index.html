@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nanochat Laboratory</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: light-dark(#f5f2ea, #101416);
+      --panel: light-dark(#fffdf8, #182024);
+      --ink: light-dark(#202522, #eef3ef);
+      --muted: light-dark(#667069, #aab6af);
+      --line: light-dark(#d8ddd7, #34413b);
+      --accent: light-dark(#175c45, #75d7aa);
+      --accent-soft: light-dark(#dceee5, #203c31);
+      --danger: light-dark(#a13d32, #ff9185);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); }
+    main { width: min(1180px, calc(100% - 32px)); margin: 36px auto 64px; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(30px, 5vw, 48px); font-weight: 500; }
+    header p { margin: 8px 0 0; color: var(--muted); }
+    .status { color: var(--muted); font-size: 14px; text-align: right; }
+    .workspace { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 18px; }
+    section { background: var(--panel); border: 1px solid var(--line); }
+    .runs { max-height: 680px; overflow: auto; }
+    .section-title { position: sticky; top: 0; z-index: 2; margin: 0; padding: 16px 18px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+    .run { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .run:hover { background: var(--accent-soft); }
+    .run input { margin-top: 3px; accent-color: var(--accent); }
+    .run strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
+    .run small { display: block; margin-top: 4px; color: var(--muted); }
+    .analysis { min-width: 0; }
+    .controls { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    label { font-size: 13px; color: var(--muted); }
+    select { margin-left: 7px; padding: 7px 28px 7px 9px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+    button { padding: 8px 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    .chart-wrap { padding: 18px; min-height: 400px; }
+    svg { display: block; width: 100%; height: 380px; overflow: visible; }
+    .axis, .grid { stroke: var(--line); stroke-width: 1; }
+    .grid { opacity: .6; }
+    .axis-label, .tick { fill: var(--muted); font-size: 12px; }
+    .empty { display: grid; min-height: 360px; place-items: center; color: var(--muted); text-align: center; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .legend span::before { content: ""; display: inline-block; width: 18px; height: 3px; margin: 0 7px 3px 0; background: var(--series); }
+    #table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin-top: 18px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    td.num { font-variant-numeric: tabular-nums; text-align: right; }
+    .warning { color: var(--danger); }
+    @media (max-width: 760px) {
+      main { width: min(100% - 20px, 720px); margin-top: 20px; }
+      header { align-items: start; flex-direction: column; }
+      .status { text-align: left; }
+      .workspace { grid-template-columns: 1fr; }
+      .runs { max-height: 270px; }
+      .controls { align-items: stretch; flex-direction: column; }
+      svg { height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Nanochat Laboratory</h1>
+        <p>Compare learning dynamics, final quality, and compute—not just winners.</p>
+      </div>
+      <div class="status" id="status" role="status">Loading runs…</div>
+    </header>
+
+    <div class="workspace">
+      <section class="runs" aria-label="Available runs">
+        <h2 class="section-title">Runs · select up to six</h2>
+        <div id="run-list"></div>
+      </section>
+
+      <section class="analysis" aria-label="Metric comparison">
+        <div class="controls">
+          <label>Metric
+            <select id="metric">
+              <option value="val_bpb">Validation BPB</option>
+              <option value="train_loss">Training loss</option>
+              <option value="tokens_per_second">Tokens / second</option>
+              <option value="lr_multiplier">LR multiplier</option>
+              <option value="core">CORE</option>
+              <option value="chatcore">ChatCORE</option>
+              <option value="reward">Reward</option>
+              <option value="pass_at_1">Pass@1</option>
+            </select>
+          </label>
+          <button id="clear" type="button">Clear selection</button>
+        </div>
+        <div class="chart-wrap" id="chart-wrap">
+          <div class="empty">Select one or more controlled runs to inspect.</div>
+        </div>
+      </section>
+    </div>
+    <div id="table-wrap"></div>
+  </main>
+
+  <script>
+    const palette = ["#16866a", "#cf6b32", "#6f71c9", "#b74876", "#65902f", "#3c82ba"];
+    const state = { runs: [], selected: new Map(), metric: "val_bpb" };
+    const runList = document.getElementById("run-list");
+    const chartWrap = document.getElementById("chart-wrap");
+    const tableWrap = document.getElementById("table-wrap");
+    const status = document.getElementById("status");
+    const metricSelect = document.getElementById("metric");
+
+    fetch("/api/runs")
+      .then(response => response.json())
+      .then(runs => {
+        state.runs = runs;
+        status.textContent = `${runs.length} captured run${runs.length === 1 ? "" : "s"}`;
+        renderRunList();
+      })
+      .catch(error => { status.innerHTML = `<span class="warning">${escapeHtml(error.message)}</span>`; });
+
+    metricSelect.addEventListener("change", () => { state.metric = metricSelect.value; render(); });
+    document.getElementById("clear").addEventListener("click", () => {
+      state.selected.clear();
+      renderRunList();
+      render();
+    });
+
+    function renderRunList() {
+      if (!state.runs.length) {
+        runList.innerHTML = '<div class="empty">No runs yet.<br>Start with w0-smoke.</div>';
+        return;
+      }
+      runList.innerHTML = state.runs.map(run => {
+        const checked = state.selected.has(run.execution_id) ? "checked" : "";
+        const minutes = ((run.duration_seconds || 0) / 60).toFixed(1);
+        return `<label class="run">
+          <input type="checkbox" data-id="${escapeHtml(run.execution_id)}" ${checked}>
+          <span><strong>${escapeHtml(run.execution_id)}</strong><small>${escapeHtml(run.topic)} · ${minutes} min · ${escapeHtml(run.status)}</small></span>
+        </label>`;
+      }).join("");
+      runList.querySelectorAll("input").forEach(input => input.addEventListener("change", async event => {
+        const id = event.target.dataset.id;
+        if (event.target.checked && state.selected.size >= 6) {
+          event.target.checked = false;
+          status.textContent = "Select at most six runs.";
+          return;
+        }
+        if (event.target.checked) {
+          const metrics = await fetch(`/api/metrics?run=${encodeURIComponent(id)}`).then(response => response.json());
+          state.selected.set(id, metrics);
+        } else {
+          state.selected.delete(id);
+        }
+        render();
+      }));
+    }
+
+    function render() {
+      const series = [...state.selected.entries()].map(([id, metrics]) => ({
+        id,
+        points: metrics.filter(metric => metric.name === state.metric).map(metric => ({ x: metric.step, y: metric.value }))
+      })).filter(series => series.points.length);
+      if (!series.length) {
+        chartWrap.innerHTML = `<div class="empty">No ${escapeHtml(metricLabel())} observations in the selected runs.</div>`;
+        tableWrap.innerHTML = "";
+        return;
+      }
+      drawChart(series);
+      drawTable(series);
+    }
+
+    function drawChart(series) {
+      const width = Math.max(300, chartWrap.clientWidth - 36);
+      const height = 350;
+      const margin = { top: 18, right: 22, bottom: 50, left: 70 };
+      const all = series.flatMap(item => item.points);
+      const xMin = Math.min(...all.map(point => point.x));
+      const xMax = Math.max(...all.map(point => point.x));
+      const yMinRaw = Math.min(...all.map(point => point.y));
+      const yMaxRaw = Math.max(...all.map(point => point.y));
+      const yPad = Math.max((yMaxRaw - yMinRaw) * .08, Math.abs(yMaxRaw || 1) * .01);
+      const yMin = yMinRaw - yPad;
+      const yMax = yMaxRaw + yPad;
+      const x = value => margin.left + (value - xMin) / Math.max(1, xMax - xMin) * (width - margin.left - margin.right);
+      const y = value => height - margin.bottom - (value - yMin) / Math.max(Number.EPSILON, yMax - yMin) * (height - margin.top - margin.bottom);
+      const ticks = 5;
+      let grid = "";
+      for (let index = 0; index <= ticks; index += 1) {
+        const value = yMin + (yMax - yMin) * index / ticks;
+        const py = y(value);
+        grid += `<line class="grid" x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}"></line>`;
+        grid += `<text class="tick" x="${margin.left - 9}" y="${py + 4}" text-anchor="end">${format(value)}</text>`;
+      }
+      const paths = series.map((item, index) => {
+        const d = item.points.sort((a, b) => a.x - b.x).map((point, pointIndex) => `${pointIndex ? "L" : "M"}${x(point.x)},${y(point.y)}`).join(" ");
+        const dots = item.points.map(point => `<circle cx="${x(point.x)}" cy="${y(point.y)}" r="3" fill="${palette[index]}"><title>${escapeHtml(item.id)} · step ${point.x}: ${format(point.y)}</title></circle>`).join("");
+        return `<path d="${d}" fill="none" stroke="${palette[index]}" stroke-width="2.5"></path>${dots}`;
+      }).join("");
+      const legend = series.map((item, index) => `<span style="--series:${palette[index]}">${escapeHtml(item.id)}</span>`).join("");
+      chartWrap.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(metricLabel())} by training step">
+        ${grid}
+        <line class="axis" x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}"></line>
+        <line class="axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}"></line>
+        ${paths}
+        <text class="axis-label" x="${(margin.left + width - margin.right) / 2}" y="${height - 10}" text-anchor="middle">Training step</text>
+        <text class="axis-label" transform="translate(18 ${(margin.top + height - margin.bottom) / 2}) rotate(-90)" text-anchor="middle">${escapeHtml(metricLabel())}</text>
+      </svg><div class="legend">${legend}</div>`;
+    }
+
+    function drawTable(series) {
+      const runById = new Map(state.runs.map(run => [run.execution_id, run]));
+      const rows = series.map(item => {
+        const values = item.points.map(point => point.y);
+        const run = runById.get(item.id) || {};
+        return `<tr><td>${escapeHtml(item.id)}</td><td>${escapeHtml(run.topic || "—")}</td><td class="num">${format(values[values.length - 1])}</td><td class="num">${format(Math.min(...values))}</td><td class="num">${((run.duration_seconds || 0) / 60).toFixed(1)}</td></tr>`;
+      }).join("");
+      tableWrap.innerHTML = `<table><thead><tr><th>Run</th><th>Topic</th><th>Final</th><th>Minimum</th><th>Minutes</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function metricLabel() {
+      return metricSelect.options[metricSelect.selectedIndex].text;
+    }
+    function format(value) {
+      if (!Number.isFinite(value)) return "—";
+      if (Math.abs(value) >= 1000) return Math.round(value).toLocaleString();
+      return Number(value).toPrecision(5).replace(/\.?0+$/, "");
+    }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+    }
+  </script>
+</body>
+</html>
