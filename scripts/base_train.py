@@ -41,6 +41,7 @@ print_banner()
 parser = argparse.ArgumentParser(description="Pretrain base model")
 # Logging
 parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('dummy' disables wandb logging)")
+parser.add_argument("--log-every", type=int, default=100, help="log train metrics to wandb every N steps (grad norm is only measured on these steps)")
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 # FP8 training
@@ -86,7 +87,12 @@ device_type = autodetect_device_type() if args.device_type == "" else args.devic
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init(device_type)
 master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
 synchronize = torch.cuda.synchronize if device_type == "cuda" else lambda: None
-get_max_memory = torch.cuda.max_memory_allocated if device_type == "cuda" else lambda: 0
+if device_type == "cuda":
+    get_max_memory = torch.cuda.max_memory_allocated
+elif device_type == "mps":
+    get_max_memory = torch.mps.driver_allocated_memory
+else:
+    get_max_memory = lambda: 0
 if device_type == "cuda":
     gpu_device_name = torch.cuda.get_device_name(0)
     gpu_peak_flops = get_peak_flops(gpu_device_name)
@@ -386,6 +392,19 @@ def get_weight_decay(it):
     return weight_decay_scaled * 0.5 * (1 + math.cos(math.pi * it / num_iterations))
 
 # -----------------------------------------------------------------------------
+# Global L2 norm of the gradient: the cheapest early warning for a diverging run.
+# Costs a pass over every gradient, so we only measure it on logging steps.
+# Note gradients are all-reduced inside optimizer.step(), so on >1 rank this is the
+# local (pre-reduction) gradient norm, which is a proxy, not the exact global norm.
+@torch.no_grad()
+def compute_grad_norm(params):
+    grads = [p.grad for p in params if p.grad is not None]
+    if not grads:
+        return float("nan")
+    norms = torch.stack([n.float() for n in torch._foreach_norm(grads)])
+    return torch.linalg.vector_norm(norms).item()
+
+# -----------------------------------------------------------------------------
 # Training loop
 
 # Loop state (variables updated by the training loop)
@@ -395,6 +414,7 @@ if not resuming:
     min_val_bpb = float("inf")
     smooth_train_loss = 0 # EMA of training loss
     total_training_time = 0 # total wall-clock time of training
+    nonfinite_steps = 0 # number of steps where the loss went nan/inf
 else:
     step = meta_data["step"]
     loop_state = meta_data["loop_state"]
@@ -402,6 +422,7 @@ else:
     min_val_bpb = loop_state["min_val_bpb"]
     smooth_train_loss = loop_state["smooth_train_loss"]
     total_training_time = loop_state["total_training_time"]
+    nonfinite_steps = loop_state.get("nonfinite_steps", 0)
 
 # Figure out the needed gradient accumulation micro-steps to reach the desired total batch size per step
 tokens_per_fwdbwd = args.device_batch_size * args.max_seq_len # tokens per iteration for a single rank
@@ -432,6 +453,8 @@ while True:
             "total_training_flops": flops_so_far,
             "total_training_time": total_training_time,
             "val/bpb": val_bpb,
+            "val/min_bpb": min_val_bpb, # running best, so the runs table can be sorted on it
+            "val/ppl_per_byte": 2 ** val_bpb, # perplexity, but per byte of text instead of per token
         })
         model.train()
 
@@ -447,6 +470,7 @@ while True:
         wandb_run.log({
             "step": step,
             "total_training_flops": flops_so_far,
+            "total_training_time": total_training_time,
             "core_metric": results["core_metric"],
             "centered_results": results["centered_results"],
         })
@@ -466,11 +490,19 @@ while True:
             "If 5*x + 3 = 13, then x is",
         ]
         engine = Engine(orig_model, tokenizer) # use orig_model to avoid recompilation
+        sample_rows = []
         for prompt in prompts:
             tokens = tokenizer(prompt, prepend="<|bos|>")
             with disable_fp8(orig_model):
                 sample, _ = engine.generate_batch(tokens, num_samples=1, max_tokens=16, temperature=0)
-            print0(tokenizer.decode(sample[0]))
+            completion = tokenizer.decode(sample[0])
+            print0(completion)
+            sample_rows.append([step, prompt, completion])
+        # the samples are the qualitative metric: eyeball them over the run
+        wandb_run.log({
+            "step": step,
+            "samples": wandb.Table(columns=["step", "prompt", "completion"], data=sample_rows),
+        })
         model.train()
 
     # save checkpoint: at the end of the run, or every save_every steps, except at the first step or the resume step
@@ -493,6 +525,7 @@ while True:
                     "min_val_bpb": min_val_bpb,
                     "smooth_train_loss": smooth_train_loss,
                     "total_training_time": total_training_time,
+                    "nonfinite_steps": nonfinite_steps,
                 },
             },
             rank=ddp_rank,
@@ -525,6 +558,7 @@ while True:
         if group['kind'] == 'muon':
             group["momentum"] = muon_momentum
             group["weight_decay"] = muon_weight_decay
+    log_this_step = step % args.log_every == 0
     if scaler is not None:
         scaler.unscale_(optimizer)
         # In distributed training, all ranks must agree on whether to skip the step.
@@ -533,6 +567,9 @@ while True:
         if is_ddp_initialized():
             for v in scaler._found_inf_per_device(optimizer).values():
                 dist.all_reduce(v, op=dist.ReduceOp.MAX)
+    # the optimizer consumes (and reduces) the gradients, so measure their norm first
+    grad_norm = compute_grad_norm(orig_model.parameters()) if log_this_step else None
+    if scaler is not None:
         scaler.step(optimizer)
         scaler.update()
     else:
@@ -562,21 +599,43 @@ while True:
         eta_seconds = remaining_steps * avg_time_per_step
         eta_str = f" | eta: {eta_seconds/60:.1f}m"
     else:
+        eta_seconds = 0.0
         eta_str = ""
+    if not math.isfinite(train_loss_f):
+        nonfinite_steps += 1
+        print0(f"WARNING: step {step:05d} loss is {train_loss_f}, the run is diverging (nonfinite steps so far: {nonfinite_steps})")
     epoch = f"{dataloader_state_dict['epoch']} pq: {dataloader_state_dict['pq_idx']} rg: {dataloader_state_dict['rg_idx']}"
     print0(f"step {step:05d}/{num_iterations:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | bf16_mfu: {mfu:.2f} | epoch: {epoch} | total time: {total_training_time/60:.2f}m{eta_str}")
-    if step % 100 == 0:
+    if log_this_step:
         log_data = {
             "step": step,
             "total_training_flops": flops_so_far,
             "total_training_time": total_training_time,
-            "train/loss": debiased_smooth_loss,
+            # quality
+            "train/loss": debiased_smooth_loss, # EMA-smoothed, for a readable curve
+            "train/loss_raw": train_loss_f, # unsmoothed, so that loss spikes stay visible
+            "train/ppl": math.exp(min(train_loss_f, 20)) if math.isfinite(train_loss_f) else float("nan"),
+            # health
+            "train/grad_norm": grad_norm,
+            "train/nonfinite_steps": nonfinite_steps,
+            # schedules (lrm alone does not capture the momentum/weight decay schedules)
             "train/lrm": lrm,
+            "train/muon_momentum": muon_momentum,
+            "train/muon_weight_decay": muon_weight_decay,
+            # efficiency
             "train/dt": dt,
             "train/tok_per_sec": tok_per_sec,
             "train/mfu": mfu,
-            "train/epoch": epoch,
+            "train/peak_memory_mib": get_max_memory() / 1024 / 1024,
+            # progress
+            "train/tokens": total_batch_size * step,
+            "train/pct_done": pct_done,
+            "train/eta_seconds": eta_seconds,
+            "train/epoch": dataloader_state_dict["epoch"], # numeric, unlike the string used for printing
+            "train/pq_idx": dataloader_state_dict["pq_idx"],
         }
+        for i, group in enumerate(optimizer.param_groups):
+            log_data[f"train/lr/{group['kind']}_{i}"] = group["lr"] # actual LRs, not just the multiplier
         wandb_run.log(log_data)
 
     # state update
@@ -598,6 +657,17 @@ print0(f"Peak memory usage: {get_max_memory() / 1024 / 1024:.2f}MiB")
 print0(f"Total training time: {total_training_time/60:.2f}m")
 if val_bpb is not None:
     print0(f"Minimum validation bpb: {min_val_bpb:.6f}")
+wandb_run.summary.update({
+    "final/num_params": num_params,
+    "final/num_iterations": num_iterations,
+    "final/total_tokens": total_batch_size * num_iterations,
+    "final/total_training_flops": num_flops_per_token * total_batch_size * num_iterations,
+    "final/total_training_time": total_training_time,
+    "final/peak_memory_mib": get_max_memory() / 1024 / 1024,
+    "final/nonfinite_steps": nonfinite_steps,
+    **({"final/val_bpb": val_bpb, "final/min_val_bpb": min_val_bpb} if val_bpb is not None else {}),
+    **({"final/core_metric": results["core_metric"]} if results else {}),
+})
 
 # cleanup
 wandb_run.finish() # wandb run finish

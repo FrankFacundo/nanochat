@@ -216,7 +216,7 @@ def compute_cleanup():
 class DummyWandb:
     """Useful if we wish to not use wandb but have all the same signatures"""
     def __init__(self):
-        pass
+        self.summary = {} # a plain dict is enough: it has .update() like the real thing
     def log(self, *args, **kwargs):
         pass
     def finish(self):
