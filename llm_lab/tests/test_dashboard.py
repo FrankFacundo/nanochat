@@ -7,6 +7,8 @@ class DashboardTests(unittest.TestCase):
     def test_dashboard_has_required_controls(self):
         html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
         self.assertIn('id="challenge-card"', html)
+        self.assertIn("What you need to do now", html)
+        self.assertIn("No experiment or attachment needed", html)
         self.assertIn('id="stats-grid"', html)
         self.assertIn('id="metric-select"', html)
         self.assertIn("/api/learning", html)

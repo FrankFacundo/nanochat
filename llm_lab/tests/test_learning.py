@@ -67,6 +67,14 @@ class LearningCatalogTests(unittest.TestCase):
         self.assertEqual(snapshot["activities"][0]["status"], "ready")
         self.assertEqual(snapshot["activities"][1]["status"], "locked")
 
+    def test_first_activity_explains_the_exact_deliverable(self):
+        activity = LearningCatalog().activity("w0-method-defense")
+        self.assertEqual(activity["submission_type"], "Written response only")
+        self.assertFalse(activity["evidence_required"])
+        self.assertIn("do not need to run code", activity["deliverable"])
+        self.assertEqual(len(activity["lesson"]), 4)
+        self.assertIn("1. Variables", activity["prompt"])
+
 
 class EvaluationTests(unittest.TestCase):
     def test_llm_attempt_is_persisted_and_unlocks_the_next_activity(self):

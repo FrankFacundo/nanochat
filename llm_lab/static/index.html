@@ -84,6 +84,22 @@
     .skill-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
     .skill-chip { padding: 6px 9px; border: 1px solid #d7d4cb; border-radius: 7px; color: #4d5b70; background: rgba(255,255,255,.7); font-size: 11px; }
     .challenge-body { padding: 27px 30px 31px; }
+    .action-plan { margin-bottom: 24px; padding: 18px; border: 1px solid #d5dbe5; border-radius: 12px; background: #f2f6fb; }
+    .action-plan h3 { margin: 0 0 13px; font-size: 15px; }
+    .action-steps { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
+    .action-step { display: grid; grid-template-columns: 29px 1fr; gap: 10px; align-items: start; }
+    .step-number { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--navy); color: white; font-size: 11px; font-weight: 800; }
+    .action-step strong { display: block; margin: 1px 0 2px; font-size: 12px; }
+    .action-step p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .lesson-panel { margin: 0 0 25px; padding: 20px; border: 1px solid #ead8b6; border-radius: 12px; background: #fff9ed; }
+    .lesson-panel h3 { margin: 0; font: 500 20px/1.2 Georgia, serif; }
+    .lesson-intro { margin: 5px 0 15px; color: var(--muted); font-size: 12px; }
+    .lesson-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+    .lesson-item { padding: 13px; border: 1px solid #eadfc9; border-radius: 9px; background: rgba(255,255,255,.65); }
+    .lesson-item strong { display: block; margin-bottom: 5px; color: #79531b; font-size: 12px; }
+    .lesson-item p { margin: 0; color: #536074; font-size: 11px; line-height: 1.52; }
+    .deliverable { margin: 0 0 19px; padding: 13px 15px; border-left: 4px solid var(--teal); border-radius: 0 8px 8px 0; background: var(--teal-soft); color: #275b54; font-size: 12px; line-height: 1.5; }
+    .deliverable strong { display: block; margin-bottom: 3px; }
     .section-label { margin: 0 0 10px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
     .prompt-copy { margin: 0; color: #26344a; font-size: 15px; line-height: 1.72; white-space: pre-wrap; }
     .rubric-details { margin: 22px 0 26px; border: 1px solid var(--line); border-radius: 10px; }
@@ -105,6 +121,8 @@
     .evidence-box { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #faf8f2; }
     .evidence-box h3 { margin: 0 0 4px; font-size: 14px; }
     .evidence-box > p { margin: 0 0 13px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .no-evidence { display: flex; gap: 10px; margin: 18px 0; padding: 13px 14px; border: 1px solid #b9ddd5; border-radius: 10px; background: var(--teal-soft); color: #275b54; font-size: 12px; line-height: 1.45; }
+    .no-evidence strong { display: block; margin-bottom: 2px; }
     .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
     .chip-button { padding: 6px 8px; border: 1px solid #d2cec4; background: var(--card); color: #4e5c70; font-size: 11px; }
     .chip-button:hover { border-color: var(--blue); color: var(--blue); }
@@ -239,6 +257,7 @@
       .challenge-head, .challenge-body { padding-left: 20px; padding-right: 20px; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .feedback-grid { grid-template-columns: 1fr; }
+      .lesson-grid { grid-template-columns: 1fr; }
       .skills-grid { grid-template-columns: 1fr; }
       .runs-layout { grid-template-columns: 1fr; }
       .run-list { max-height: 280px; }
@@ -268,7 +287,7 @@
       <div class="loading" id="loading">Loading your mastery plan…</div>
 
       <section class="view" id="view-learn">
-        <div class="page-heading"><div><p class="eyebrow">Adaptive study session</p><h1>Prove what you know.</h1><p>The next task is selected from your weakest unlocked skills. Opus grades the answer and only the artifacts you attach; revise until the evidence reaches the mastery bar.</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">Your next learning step</p><h1>Learn it. Answer it. Improve it.</h1><p>Start with the short lesson inside the challenge. Then follow the numbered instructions, write the requested response, and submit it for feedback.</p></div></div>
         <div id="api-warning"></div>
         <div class="learn-layout"><div><article class="card challenge-card" id="challenge-card"></article><div id="result-container"></div></div><aside class="card queue" aria-label="Course activities"><div class="queue-head"><h3>Mastery path</h3><p>85 to pass · repeated evidence to master</p></div><div class="activity-list" id="activity-list"></div></aside></div>
       </section>
@@ -344,15 +363,24 @@
       const skills = activity.skills.map(id => state.learning.skills.find(item => item.id === id)).filter(Boolean);
       const statusTag = activity.status === "passed" ? '<span class="tag success">Passed</span>' : activity.status === "needs_revision" ? '<span class="tag danger">Revise</span>' : activity.status === "locked" ? '<span class="tag">Locked</span>' : '<span class="tag warm">Next challenge</span>';
       const locked = activity.locked_by.length > 0;
-      document.getElementById("challenge-card").innerHTML = `<div class="challenge-head"><div class="challenge-meta"><span class="tag">Week ${activity.week}</span><span class="tag">${escapeHtml(activity.kind)}</span><span class="tag">≈ ${activity.estimated_minutes} min</span>${statusTag}</div><h2>${escapeHtml(activity.title)}</h2><p class="challenge-summary">${escapeHtml(activity.summary)}</p><div class="skill-chips">${skills.map(skill => `<span class="skill-chip">${escapeHtml(skill.title)} · ${skill.mastery_percent}%</span>`).join("")}</div></div><div class="challenge-body"><p class="section-label">Your task</p><p class="prompt-copy">${escapeHtml(activity.prompt)}</p><details class="rubric-details"><summary>View the 100-point grading rubric</summary><div class="rubric-list">${activity.rubric.map(item => `<div class="rubric-item"><strong>${escapeHtml(item.label)}</strong><span>${item.points} pts</span><p>${escapeHtml(item.requirement)}</p></div>`).join("")}</div></details>${locked ? `<div class="locked-message">This activity unlocks after: <strong>${activity.locked_by.map(id => escapeHtml(activityTitle(id))).join(", ")}</strong>.</div>` : renderSubmissionForm(activity, draft)}</div>`;
+      const submissionTag = activity.submission_type ? `<span class="tag success">${escapeHtml(activity.submission_type)}</span>` : "";
+      const evidenceExpected = activity.evidence_required || (activity.suggested_evidence || []).length || (activity.suggested_run_prefixes || []).length;
+      const stepOne = (activity.lesson || []).length ? "Read the quick lesson below. It gives you the concepts needed for this challenge." : "Read the task and open the rubric so you know what a complete response must demonstrate.";
+      const stepThree = evidenceExpected ? "Attach the requested files or experiment runs, then ask Opus to grade your work." : "No code or files are needed. Submit your written answer directly to Opus.";
+      const actionPlan = `<section class="action-plan"><h3>What you need to do now</h3><ol class="action-steps"><li class="action-step"><span class="step-number">1</span><div><strong>Learn</strong><p>${escapeHtml(stepOne)}</p></div></li><li class="action-step"><span class="step-number">2</span><div><strong>Write the deliverable</strong><p>${escapeHtml(activity.deliverable || "Answer every part of the task in the response box using concrete reasoning and evidence.")}</p></div></li><li class="action-step"><span class="step-number">3</span><div><strong>Submit and improve</strong><p>${escapeHtml(stepThree)} Revise if the score is below 85.</p></div></li></ol></section>`;
+      const lesson = (activity.lesson || []).length ? `<section class="lesson-panel"><h3>Step 1 · Quick lesson</h3><p class="lesson-intro">Read this first. You are not expected to know these terms before the course teaches them.</p><div class="lesson-grid">${activity.lesson.map(item => `<article class="lesson-item"><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.body)}</p></article>`).join("")}</div></section>` : "";
+      const deliverable = activity.deliverable ? `<div class="deliverable"><strong>Your deliverable</strong>${escapeHtml(activity.deliverable)}</div>` : "";
+      document.getElementById("challenge-card").innerHTML = `<div class="challenge-head"><div class="challenge-meta"><span class="tag">Week ${activity.week}</span><span class="tag">${escapeHtml(activity.kind)}</span><span class="tag">≈ ${activity.estimated_minutes} min</span>${submissionTag}${statusTag}</div><h2>${escapeHtml(activity.title)}</h2><p class="challenge-summary">${escapeHtml(activity.summary)}</p><div class="skill-chips">${skills.map(skill => `<span class="skill-chip">${escapeHtml(skill.title)} · ${skill.mastery_percent}%</span>`).join("")}</div></div><div class="challenge-body">${actionPlan}${lesson}<p class="section-label">Step 2 · Questions to answer</p>${deliverable}<p class="prompt-copy">${escapeHtml(activity.prompt)}</p><details class="rubric-details"><summary>Before writing: see exactly how Opus will score this</summary><div class="rubric-list">${activity.rubric.map(item => `<div class="rubric-item"><strong>${escapeHtml(item.label)}</strong><span>${item.points} pts</span><p>${escapeHtml(item.requirement)}</p></div>`).join("")}</div></details>${locked ? `<div class="locked-message">This activity unlocks after: <strong>${activity.locked_by.map(id => escapeHtml(activityTitle(id))).join(", ")}</strong>.</div>` : renderSubmissionForm(activity, draft)}</div>`;
       if (!locked) bindSubmissionForm(activity);
       renderResult(activity);
     }
 
     function renderSubmissionForm(activity, draft) {
-      const runs = evidenceRuns(activity, draft);
+      const evidenceExpected = activity.evidence_required || (activity.suggested_evidence || []).length || (activity.suggested_run_prefixes || []).length;
+      const runs = evidenceExpected ? evidenceRuns(activity, draft) : "";
       const suggestions = (activity.suggested_evidence || []).map(path => `<button type="button" class="chip-button evidence-suggestion" data-path="${escapeHtml(path)}">+ ${escapeHtml(path)}</button>`).join("");
-      return `<div class="field"><div class="field-head"><label for="answer">Written defense</label><span>Explain decisions; do not paste the reference answer.</span></div><textarea id="answer" placeholder="Write your reasoning, calculations, interpretation, or code defense here…">${escapeHtml(draft.answer)}</textarea></div><div class="evidence-box"><h3>Attach evidence</h3><p>Files and run artifacts are read on the server, hashed, and sent to the evaluator with your answer. The API key never enters this page.</p><div class="field"><div class="field-head"><label for="evidence-paths">Workspace paths</label><span>One relative path per line · folders supported</span></div><textarea id="evidence-paths" placeholder="llm_lab/student/protocol.md&#10;tests/test_my_change.py">${escapeHtml(draft.evidencePaths)}</textarea>${suggestions ? `<div class="suggestions">${suggestions}</div>` : ""}</div><div class="field"><div class="field-head"><label>Captured runs</label><span>Select the immutable run evidence to grade</span></div><div class="run-evidence">${runs}</div></div></div><div class="grader-note"><span>◆</span><span><strong>${escapeHtml(state.learning.grader.model)}</strong> grades against this activity's rubric and course reference. Scores below 85 return a focused retry plan; mastery combines repeated skill evidence.</span></div><div class="submission-row"><button class="primary-button" id="grade-button" type="button" ${state.learning.grader.configured ? "" : "disabled"}>Grade this attempt</button><span class="submit-status" id="submit-status" role="status"></span></div>`;
+      const evidenceSection = evidenceExpected ? `<div class="evidence-box"><h3>Step 3 · Attach evidence</h3><p>This challenge expects supporting work. Add only the files and runs that demonstrate your answer.</p><div class="field"><div class="field-head"><label for="evidence-paths">Workspace paths</label><span>One relative path per line · folders supported</span></div><textarea id="evidence-paths" placeholder="llm_lab/student/protocol.md&#10;tests/test_my_change.py">${escapeHtml(draft.evidencePaths)}</textarea>${suggestions ? `<div class="suggestions">${suggestions}</div>` : ""}</div><div class="field"><div class="field-head"><label>Captured runs</label><span>Select the immutable run evidence to grade</span></div><div class="run-evidence">${runs}</div></div></div>` : `<div class="no-evidence"><span>✓</span><div><strong>No experiment or attachment needed</strong>For this challenge, completing the written response is enough. Leave files and runs alone.</div></div>`;
+      return `<div class="field"><div class="field-head"><label for="answer">Your answer</label><span>Complete each numbered section in your own words.</span></div><textarea id="answer" placeholder="${escapeHtml(activity.answer_template || "Write your reasoning, calculations, interpretation, or code defense here…")}">${escapeHtml(draft.answer)}</textarea></div>${evidenceSection}<div class="grader-note"><span>◆</span><span><strong>${escapeHtml(state.learning.grader.model)}</strong> grades this response against the visible rubric. You will receive a score, specific corrections, and one follow-up question.</span></div><div class="submission-row"><button class="primary-button" id="grade-button" type="button" ${state.learning.grader.configured ? "" : "disabled"}>Grade my answer</button><span class="submit-status" id="submit-status" role="status"></span></div>`;
     }
 
     function evidenceRuns(activity, draft) {
@@ -365,7 +393,7 @@
     function bindSubmissionForm(activity) {
       const draft = draftFor(activity.id);
       document.getElementById("answer").addEventListener("input", event => { draft.answer = event.target.value; });
-      document.getElementById("evidence-paths").addEventListener("input", event => { draft.evidencePaths = event.target.value; });
+      document.getElementById("evidence-paths")?.addEventListener("input", event => { draft.evidencePaths = event.target.value; });
       document.querySelectorAll(".evidence-suggestion").forEach(button => button.addEventListener("click", () => { const paths = new Set(draft.evidencePaths.split("\n").map(item => item.trim()).filter(Boolean)); paths.add(button.dataset.path); draft.evidencePaths = [...paths].join("\n"); document.getElementById("evidence-paths").value = draft.evidencePaths; }));
       document.querySelectorAll("[data-run-id]").forEach(input => input.addEventListener("change", event => { if (event.target.checked) draft.runIds.add(event.target.dataset.runId); else draft.runIds.delete(event.target.dataset.runId); }));
       document.getElementById("grade-button").addEventListener("click", () => submitAttempt(activity));
@@ -373,13 +401,13 @@
 
     async function submitAttempt(activity) {
       const draft = draftFor(activity.id), button = document.getElementById("grade-button"), status = document.getElementById("submit-status");
-      button.disabled = true; button.innerHTML = '<span class="spinner"></span>Opus is grading…'; status.className = "submit-status"; status.textContent = "This can take a minute for code and run evidence.";
+      button.disabled = true; button.innerHTML = '<span class="spinner"></span>Opus is grading…'; status.className = "submit-status"; status.textContent = "This usually takes around a minute.";
       try {
         const response = await fetch("/api/evaluate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activity_id: activity.id, answer: draft.answer, evidence_paths: draft.evidencePaths.split("\n").map(item => item.trim()).filter(Boolean), run_ids: [...draft.runIds] }) });
         const result = await response.json();
         if (!response.ok || result.error) throw new Error(result.error || `Grading failed (${response.status})`);
         state.lastAttempt = result.attempt; state.learning = result.learning; renderAll(); showView("learn"); document.getElementById("result-container").scrollIntoView({ behavior: "smooth", block: "start" });
-      } catch (error) { button.disabled = false; button.textContent = "Grade this attempt"; status.className = "submit-status error"; status.textContent = error.message; }
+      } catch (error) { button.disabled = false; button.textContent = "Grade my answer"; status.className = "submit-status error"; status.textContent = error.message; }
     }
 
     function renderActivityList() {
