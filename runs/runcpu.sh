@@ -47,10 +47,16 @@ python -m scripts.base_train \
 python -m scripts.base_eval --device-batch-size=1 --split-tokens=16384 --max-per-task=16
 
 # SFT (~10 minutes on my MacBook Pro M3 Max)
+# The ChatCORE flags matter here: by default it evaluates every categorical task in full
+# (14K MMLU problems) plus 24 sampled problems per generative task, every 200 steps, which
+# costs ~11 minutes per evaluation and would dwarf the training itself on this budget.
 python -m scripts.chat_sft \
     --eval-every=200 \
     --eval-tokens=524288 \
     --num-iterations=1500 \
+    --chatcore-every=500 \
+    --chatcore-max-cat=1024 \
+    --chatcore-max-sample=8 \
     --run=$WANDB_RUN
 
 # Chat with the model over CLI

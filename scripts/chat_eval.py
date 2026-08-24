@@ -109,9 +109,12 @@ def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems
         padded_prompt_ids = [ids + [bos] * (max_length - len(ids)) for ids in prompt_ids]
         prompt_ids = torch.tensor(padded_prompt_ids, dtype=torch.long, device=device)
 
-        # Get the logits for the whole batch of conversations in parallel (efficiency win here)
+        # Get the logits for the whole batch of conversations in parallel (efficiency win here).
+        # We only ever look at the answer position of each row, so ask for just those positions:
+        # materializing (B, T, V) logits is what makes long-prompt tasks like MMLU blow up memory.
+        answer_pos = torch.tensor(answer_time_positions, dtype=torch.long, device=device)
         with torch.no_grad():
-            logits = model(prompt_ids) # (B, T, V)
+            logits = model(prompt_ids, logit_positions=answer_pos) # (B, 1, V)
 
         # Focus on the available answer on just the letters corresponding to choices
         # Note that this helps the evaluation a lot because it specifically narrows the focus to only the available letters
@@ -127,9 +130,9 @@ def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems
                     assert len(encoded_letter) == 1, "Each letter must be a single token"
                     letter_to_id_cache[letter] = encoded_letter[0]
                 letter_ids.append(letter_to_id_cache[letter])
-            # focus logits just down to the answer position and the available letters of the answer
-            answer_pos = answer_time_positions[idx]
-            focus_logits = logits[idx, answer_pos, letter_ids]
+            # focus logits just down to the available letters of the answer
+            # (dim 1 is already the answer position, see logit_positions above)
+            focus_logits = logits[idx, 0, letter_ids]
             # get the argmax letter (the predicted answer)
             argmax_letter_id = focus_logits.argmax(dim=-1).item()
             predicted_letter = letters[argmax_letter_id]

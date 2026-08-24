@@ -219,7 +219,12 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
         nonlocal cursor, epoch
         while len(conv_buffer) < buffer_size:
             conversation = dataset[cursor]
-            ids, mask = tokenizer.render_conversation(conversation)
+            # Render to at most row_capacity tokens. A conversation longer than a row can
+            # never be selected by the best-fit packer below, so it would sit in the buffer
+            # forever, and once the buffer fills up with such conversations every row would
+            # be pure padding and training would silently stop. The model cannot attend past
+            # max_seq_len anyway, so the tail is not usable.
+            ids, mask = tokenizer.render_conversation(conversation, max_tokens=row_capacity)
             conv_buffer.append((ids, mask))
             cursor += ddp_world_size
             if cursor >= dataset_size:
@@ -237,8 +242,7 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
             padded = False
             while len(row) < row_capacity:
                 # Ensure buffer has conversations
-                while len(conv_buffer) < buffer_size:
-                    refill_buffer()
+                refill_buffer()
 
                 remaining = row_capacity - len(row)
 
@@ -289,6 +293,13 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
             # Trigger last_step when we've consumed enough (instead of when cursor wraps)
             if consumed >= dataset_size:
                 last_step = True
+
+        # Every batch must supervise at least one token. If none do, cross_entropy averages
+        # over zero elements and returns nan with zero gradients, i.e. training silently
+        # becomes a no-op while the optimizer keeps stepping on stale momentum. Targets are
+        # shifted by one, so row i supervises the positions where mask_rows[i][1:content_len] is 1.
+        num_supervised = sum(sum(m[1:c]) for m, c in zip(mask_rows, row_lengths))
+        assert num_supervised > 0, f"{split} batch has no supervised tokens, the packing buffer is starved"
 
         # Build tensors
         use_cuda = device_type == "cuda"

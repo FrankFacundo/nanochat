@@ -456,7 +456,7 @@ class GPT(nn.Module):
             group["initial_lr"] = group["lr"]
         return optimizer
 
-    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean'):
+    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean', logit_positions=None):
         B, T = idx.size()
 
         # Grab the rotary embeddings for the current sequence length (they are of shape (1, seq_len, 1, head_dim/2))
@@ -506,6 +506,15 @@ class GPT(nn.Module):
         if x_backout is not None:
             x = x - self.backout_lambda.to(x.dtype) * x_backout
         x = norm(x)
+
+        # If only a few positions are needed (e.g. the answer position of a multiple choice
+        # question), narrow x down before the lm_head. The logits are by far the biggest
+        # tensor in the forward pass, so this turns a (B, T, vocab_size) allocation into a
+        # (B, 1, vocab_size) one, which is what keeps long-prompt evals off the swap file.
+        if logit_positions is not None:
+            assert targets is None, "logit_positions is for inference only, it breaks the target alignment"
+            idx_gather = logit_positions.view(B, 1, 1).expand(B, 1, x.size(-1))
+            x = x.gather(1, idx_gather) # (B, 1, n_embd)
 
         # Forward the lm_head (compute logits)
         softcap = 15 # smoothly cap the logits to the range [-softcap, softcap]
