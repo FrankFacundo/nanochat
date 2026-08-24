@@ -1,0 +1,162 @@
+====================================================================================================
+1. SERIALIZATION: one GSM8K conversation -> token ids + supervision mask
+====================================================================================================
+  conversation has 2 messages; renders to 129 tokens
+
+     i     id token                      mask  role of this position
+     0  32759 <|bos|>                       0  document delimiter
+     1  32760 <|user_start|>                0  user prompt
+     2     77 'M'                           0  user prompt
+     3  31520 'imi'                         0  user prompt
+     4  10024 ' picked'                     0  user prompt
+     5    585 ' up'                         0  user prompt
+     6     32 ' '                           0  user prompt
+     7     50 '2'                           0  user prompt
+     8  13909 ' dozen'                      0  user prompt
+     9  12541 ' seas'                       0  user prompt
+    10  23896 'hells'                       0  user prompt
+    11    331 ' on'                         0  user prompt
+    12    262 ' the'                        0  user prompt
+    13   7450 ' beach'                      0  user prompt
+    14     46 '.'                           0  user prompt
+    15     32 ' '                           0  user prompt
+    16    775 ' K'                          0  user prompt
+    17   1994 'yle'                         0  user prompt
+    18    980 ' found'                      0  user prompt
+    19   5570 ' twice'                      0  user prompt
+    20    352 ' as'                         0  user prompt
+    21    776 ' many'                       0  user prompt
+    22  10318 ' shells'                     0  user prompt
+    23    352 ' as'                         0  user prompt
+    24    404 ' M'                          0  user prompt
+    25  31520 'imi'                         0  user prompt
+   ...
+    30    976 ' his'                        0  user prompt
+    31  10830 ' pocket'                     0  user prompt
+    32     46 '.'                           0  user prompt
+    33   2499 ' Le'                         0  user prompt
+    34    383 'igh'                         0  user prompt
+    35   8489 ' grab'                       0  user prompt
+    36   4298 'bed'                         0  user prompt
+    37    556 ' one'                        0  user prompt
+    38  18848 '-third'                      0  user prompt
+    39    285 ' of'                         0  user prompt
+    40    262 ' the'                        0  user prompt
+    41  10318 ' shells'                     0  user prompt
+    42    334 ' that'                       0  user prompt
+    43    775 ' K'                          0  user prompt
+    44   1994 'yle'                         0  user prompt
+    45    980 ' found'                      0  user prompt
+    46     46 '.'                           0  user prompt
+  ... (129 tokens total)
+
+  content class             mask=1 (trained)  mask=0 (not trained)
+  bos                                      0                     1
+  user prompt                              0                    57
+  assistant text                          46                     4
+  assistant tool call                     15                     0
+  tool output                              0                     6
+
+  RULES, read off nanochat/tokenizer.py render_conversation:
+    <|bos|>, user text, <|user_start|>/<|user_end|>  -> mask 0. Conditioning, not a target.
+    assistant text and <|assistant_end|>             -> mask 1. This is the learning signal.
+    <|python_start|> CODE <|python_end|>             -> mask 1. The model must learn to CALL the tool.
+    <|output_start|> RESULT <|output_end|>           -> mask 0. Produced by the Python interpreter
+      at test time, not by the model. Training on it would teach the model to hallucinate
+      execution results instead of calling the tool - the single most consequential mask in the file.
+
+====================================================================================================
+2. PACKING: many conversations per row, best-fit, padded not cropped
+====================================================================================================
+  row_capacity = max_seq_len + 1 = 513;  device_batch_size = 32
+  conversations packed per row: min=1 median=1 max=1
+  total conversations in this batch: 32
+  padding: 0 of 16,416 positions (0.0%)
+  Best-fit picks the LARGEST conversation that still fits, so padding is minimized but
+  never zero. Nothing is cropped: a conversation that does not fit waits in the buffer,
+  and render_conversation truncates at row_capacity so an over-long one can never starve it.
+
+====================================================================================================
+3. SHIFTED TARGETS AND THE THREE MASKS (exactly the arithmetic in chat_sft.py)
+====================================================================================================
+  inputs  = batch[:, :-1]  shape (32, 512)
+  targets = batch[:,  1:]  shape (32, 512)   <- position t predicts token t+1
+  stage                                             supervised positions
+  all target positions                                            16,384
+  after response-only mask (targets[mask==0] = -1)                11,120
+  after padding mask (targets[i, content_len-1:] = -1)                11,120
+  supervised fraction = 11,120/16,384 = 67.9%
+  per-row supervised tokens: min=0 median=414 max=482
+  (4 of 32 rows supervise NOTHING - legal, because
+   chat_sft asserts num_supervised > 0 per BATCH, not per row.)
+
+  -> about 32% of the FLOPs in an SFT step compute logits for
+     positions that contribute ZERO gradient. Not a bug - the prompt must be encoded to
+     condition the response - but it means 'SFT tokens' and 'SFT training signal' differ
+     by ~1.5x, which matters for every budget claim in section 5.
+  -> the mask is applied via ignore_index=-1, which is why loss_eval.evaluate_bpb needs
+     a separate code path for negative targets (W1/02) and why SFT bpb is measured over
+     RESPONSE bytes only - it is not comparable to a pretraining bpb over all bytes.
+  -> chat_sft asserts num_supervised > 0 per batch, because cross_entropy over zero
+     elements returns nan with zero grad: training would silently no-op while the
+     optimizer kept stepping on stale momentum.
+
+====================================================================================================
+4. WHY --load-optimizer IS AN INTERVENTION, NOT A DETAIL
+====================================================================================================
+  chat_sft.py defaults to --load-optimizer=1, which calls load_optimizer_state("base", ...)
+  and then load_state_dict on the optimizer. What that inherits:
+    - Muon momentum buffers for every transformer matrix (momentum 0.95 -> ~20-step memory)
+    - AdamW exp_avg / exp_avg_sq for wte, lm_head, value_embeds, scalars
+    - and, until the code explicitly restores them, the pretrained param_group LRs
+  The last one is a real trap the file documents: pretraining warmdown drives LR to ~0, so a
+  naive load would start SFT at LR~0. chat_sft saves base_lrs before the load and restores
+  them after (lines 156-161). If that restore were missing, the ablation "SFT with vs without
+  optimizer warm start" would silently become "SFT with vs without any learning at all".
+
+  It is an INTERVENTION because it changes the optimizer's state at step 0, which changes the
+  first ~20 updates' direction and magnitude - a different dependent variable trajectory from
+  the same data and the same weights.
+
+  THE CONTROL:  run the identical SFT twice, --load-optimizer=1 and --load-optimizer=0, same
+  parent checkpoint, same mixture, same steps, same seed. Everything else is already frozen by
+  the inheritance block (max_seq_len, batch sizes, and all three LRs are inherited from the
+  parent's meta.json, so the two arms cannot drift apart on hyperparameters).
+    python -m scripts.chat_sft --model-tag=d6 --load-optimizer=1 --num-iterations=1500 ... --run=sft_warm
+    python -m scripts.chat_sft --model-tag=d6 --load-optimizer=0 --num-iterations=1500 ... --run=sft_cold
+  Read out val bpb AND ChatCORE. Expect the effect to be largest in the first 100 steps and to
+  shrink by the end; if it does not shrink, the warm start is doing something other than
+  smoothing the transient and deserves its own investigation.
+
+====================================================================================================
+5. DATA MIXTURE AT FIXED EXAMPLES vs FIXED TOKENS vs FIXED STEPS
+====================================================================================================
+  source          rows  avg tokens/row  avg supervised  supervised %
+  SmolTalk     460,341           425.1           299.2         70.4%
+  MMLU aux      99,842           358.4             1.7          0.5%
+  GSM8K          7,473           171.1            97.8         57.2%
+
+  The catalog's two arms differ ONLY in --mmlu-epochs / --gsm8k-epochs:
+    w3-sft-baseline   : mmlu x3, gsm8k x4
+    w3-sft-math-heavy : mmlu x1, gsm8k x8
+
+  arm                        rows   total tokens  supervised tokens  GSM8K share of supervision
+  w3-sft-baseline         789,759    308,143,299        141,175,352                        2.1%
+  w3-sft-math-heavy       619,967    241,691,310        143,764,452                        4.1%
+
+  FIXED EXAMPLES  - "each arm sees N conversations". Different sources have different
+    lengths, so equal rows means UNEQUAL tokens and unequal gradient signal. Use only when
+    the claim is about example efficiency (e.g. annotation cost per conversation).
+  FIXED TOKENS    - "each arm sees N tokens". Closer to equal compute, but still unequal
+    SUPERVISION because supervised% differs per source (table above). Use for data-efficiency
+    claims, and report supervised tokens too.
+  FIXED STEPS     - what the catalog actually does: both arms run --num-iterations=1500 at the
+    same batch size, so both see EXACTLY the same number of tokens and the same FLOPs. The
+    mixture only changes WHICH tokens. This is the right axis for "does the mixture help",
+    and it is the only one of the three that is automatically compute-matched.
+  The trap: at fixed steps, more GSM8K epochs does NOT mean more GSM8K exposure per step
+    unless the sampler is proportional - TaskMixture concatenates, so repeating GSM8K x8
+    raises its share of rows from 3.8% to 9.6% - and simultaneously
+    DROPS MMLU from x3 to x1. The catalog's two arms are a JOINT intervention on two sources,
+    not a clean GSM8K dose-response. A clean version holds mmlu-epochs fixed at 3 and varies
+    only gsm8k-epochs.

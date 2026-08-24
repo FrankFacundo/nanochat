@@ -1,0 +1,58 @@
+2026-08-24 19:30:21,931 - nanochat.common - INFO - Distributed world size: 1
+2026-08-24 19:30:21,931 - nanochat.checkpoint_manager - INFO - Loading model from /Users/frankfacundo/.cache/nanochat/base_checkpoints/d6 with step 5000
+2026-08-24 19:30:22,031 - nanochat.checkpoint_manager - INFO - Building model with config: {'sequence_len': 512, 'vocab_size': 32768, 'n_layer': 6, 'n_head': 6, 'n_kv_head': 6, 'n_embd': 384, 'window_pattern': 'L'}
+==============================================================================
+A.1  THE NORMALIZER IS EXACTLY THE UTF-8 BYTE COUNT (not an approximation)
+==============================================================================
+  vocab_size=32,768   token_bytes.shape=(32768,)  dtype=torch.int32
+  special token ids [32759, 32760, 32761]...32767 -> token_bytes = [0]  (masked out of the metric)
+  sum(token_bytes[ids]) = 3,024,593
+  len(val_text.utf8)    = 3,024,593
+  EXACT MATCH: True   <- tokenization partitions the byte string,
+  so summing per-token byte lengths reconstructs the corpus byte count exactly.
+  With <|bos|> prepended the sum is unchanged (specials carry 0 bytes):
+    tokens 644,914 -> 644,915,  bytes 3,024,593 -> 3,024,593
+
+==============================================================================
+A.2  REPRODUCE evaluate_bpb() BY HAND ON THE REAL d6 CHECKPOINT
+==============================================================================
+Autodetected device type: mps
+  device=mps  model=d6 step=5000  seq_len=512  batch=4 steps=8  (16,384 target tokens)
+
+  total_nats            = 60,735.76 nats
+  total_bytes           = 78,670 non-special bytes
+  counted / all targets = 16,357 / 16,384 (27 specials masked)
+  bytes per counted tok = 4.8096
+
+  bpb = total_nats / (ln2 * total_bytes)
+      = 60,735.76 / (0.693147 * 78,670)
+      = 1.113807 bits/byte
+  nanochat evaluate_bpb = 1.113807   |diff| = 5.37e-08
+
+  For contrast, the tokenizer-DEPENDENT quantities on the same run:
+    mean loss/token   = 3.713136 nats = 5.356923 bits/token
+    token perplexity  = exp(mean nats/token) = 40.982
+    byte perplexity   = 2**bpb              = 2.1642   <- comparable across tokenizers
+  Identity check: bits/token / (bytes/token) = 1.113807 == bpb  -> bpb is exactly the per-token loss deflated by the compression rate.
+
+==============================================================================
+B  FOUR REAL LMs, FOUR VOCABS: token-PPL and BPB RANK THEM OPPOSITELY
+==============================================================================
+  Model class: order-0 unigram over token ids, MLE + add-alpha smoothing.
+  Every model sees the same training text and is scored on the same val BYTES.
+
+    vocab  val tokens    total nats   val bytes  bits/token  bytes/token   token PPL      BPB
+      512   1,496,724     8,003,111   3,024,593      7.7142       2.0208      210.00   3.8174
+     2048     995,600     6,609,377   3,024,593      9.5775       3.0380      764.01   3.1526
+     8192     759,787     5,598,751   3,024,593     10.6310       3.9808     1585.80   2.6705
+    32768     649,914     5,008,720   3,024,593     11.1185       4.6538     2223.29   2.3891
+
+  Ranked by token perplexity (lower=better): [512, 2048, 8192, 32768]
+  Ranked by BPB              (lower=better): [32768, 8192, 2048, 512]
+  token-PPL 'winner' = vocab 512 (PPL 210.0);  BPB winner = vocab 32768 (BPB 2.3891)
+  The vocab-512 model needs 1.60x MORE total nats to describe the identical 3,024,593 bytes,
+  yet its per-token perplexity is 10.6x LOWER. Per-token
+  normalization divides by a tokenizer-chosen denominator, so it is not a
+  property of the data. Only total nats / total bytes is tokenizer-invariant.
+
+wrote logs/02_results.json

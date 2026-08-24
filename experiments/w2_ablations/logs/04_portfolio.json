@@ -1,0 +1,47 @@
+{
+  "sigma": 0.0036508947305192523,
+  "control_mean": 1.5267836666666665,
+  "control_seeds": [
+    1.526232,
+    1.52344,
+    1.530679
+  ],
+  "arms": [
+    {
+      "name": "lr-half",
+      "desc": "all 4 group LRs x0.5",
+      "bpb": 1.612853,
+      "d": 0.08606933333333355,
+      "z": 23.57486032501744,
+      "wall": 5.4,
+      "verdict": "REAL worse"
+    },
+    {
+      "name": "lr-double",
+      "desc": "all 4 group LRs x2.0",
+      "bpb": 1.451009,
+      "d": -0.07577466666666655,
+      "z": -20.755094917757166,
+      "wall": 5.67,
+      "verdict": "REAL better"
+    },
+    {
+      "name": "wd-zero",
+      "desc": "--weight-decay 0.28->0",
+      "bpb": 1.530254,
+      "d": 0.003470333333333464,
+      "z": 0.9505432474739944,
+      "wall": 5.14,
+      "verdict": "NULL"
+    },
+    {
+      "name": "tied",
+      "desc": "--tie-embeddings 0->1",
+      "bpb": 1.559273,
+      "d": 0.03248933333333337,
+      "z": 8.89900578664796,
+      "wall": 5.0,
+      "verdict": "REAL worse"
+    }
+  ]
+}

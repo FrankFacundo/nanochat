@@ -1,0 +1,102 @@
+2026-08-24 20:54:34,476 - nanochat.common - [32m[1mINFO[0m - Distributed world size: 1
+2026-08-24 20:54:34,491 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Loading model from /Users/frankfacundo/.cache/nanochat/base_checkpoints/d6 with step 5000
+2026-08-24 20:54:34,747 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Building model with config: {'sequence_len': 512, 'vocab_size': 32768, 'n_layer': 6, 'n_head': 6, 'n_kv_head': 6, 'n_embd': 384, 'window_pattern': 'L'}
+2026-08-24 20:54:34,930 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Loading model from /Users/frankfacundo/.cache/nanochat/chatsft_checkpoints/d6 with step 1499
+2026-08-24 20:54:35,005 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Building model with config: {'sequence_len': 512, 'vocab_size': 32768, 'n_layer': 6, 'n_head': 6, 'n_kv_head': 6, 'n_embd': 384, 'window_pattern': 'L'}
+Autodetected device type: mps
+================================================================================================
+0. SAME-PARENT PROVENANCE (the precondition for any of this to mean anything)
+================================================================================================
+  base : step 5000, config {"sequence_len": 512, "vocab_size": 32768, "n_layer": 6, "n_head": 6, "n_kv_head": 6, "n_embd": 384, "window_pattern": "L"}
+  sft  : step 1499, config {"sequence_len": 512, "vocab_size": 32768, "n_layer": 6, "n_head": 6, "n_kv_head": 6, "n_embd": 384, "window_pattern": "L"}
+  identical architecture: True
+  sft inherits the base weights (chat_sft loads 'base' then fine-tunes), so the ONLY
+  difference between these two checkpoints is the SFT stage. Any comparison of a
+  DIFFERENTLY-parented pair would confound SFT with pretraining variation.
+
+================================================================================================
+A. BASE-CAPABILITY REGRESSION: pretraining val BPB, same bytes, both models
+================================================================================================
+  eval budget: 4x512x16 = 32,768 target tokens from the SAME val shards,
+  fed by the SAME deterministic loader, so both models score identical bytes.
+
+  model       val bpb   byte perplexity
+  base       1.144964            2.2114
+  sft        1.666516            3.1745
+
+  FORGETTING = +0.521552 bpb (+45.55% relative).
+  In compression terms the SFT model needs 1.4355x more bits to describe the same
+  pretraining text. This is the cost side of SFT, and it is invisible to any chat metric.
+  NOTE this is a MEASUREMENT, not yet a finding: with no seed replicates the sign is
+  trustworthy only if |0.5216| exceeds the noise floor (W2/C measures it).
+
+================================================================================================
+B. INSTRUCTION / FORMAT GAIN: fixed prompt suite, greedy, identical decoding budget
+================================================================================================
+  8 prompts, greedy (temperature=0), max 200 new tokens, identical rendering.
+
+  model      terminated within budget  mean response tokens   degenerate loops
+  base                                    0/8                 200.0                  8
+  sft                                     0/8                 200.0                  8
+
+  FORMAT GAIN = +0/8 prompts now terminate the turn.
+  Turn termination is the cleanest instruction-following proxy available here: the base
+  model has literally never been trained on <|assistant_end|> (it is only emitted with
+  mask=1 during SFT, see W3/01), so this metric isolates the SFT format contract.
+  METHOD NOTE: an earlier version of this script tested `assistant_end in generated`,
+  which is ALWAYS False - engine.py:281 documents that terminal tokens are stripped from
+  the returned ids. The corrected test is `len(generated) < budget`. Measure the
+  instrument before trusting it: a metric that cannot fire is not a null result.
+
+================================================================================================
+B2. IS TERMINATION ABSENT, OR IS GREEDY DECODING TRAPPING IT?
+================================================================================================
+  Greedy scores 0/8 for BOTH models, which alone cannot distinguish 'never learned
+  <|assistant_end|>' from 'greedy walks into a repetition loop and never reaches it'.
+  Same prompts, 8 x 4 samples, varying ONLY temperature:
+
+  model     temperature   terminated   mean len
+  base              0.0         0/32      200.0
+  base              0.8         0/32      200.0
+  base              1.0         2/32      198.7
+  sft               0.0         0/32      200.0
+  sft               0.8        11/32      168.4
+  sft               1.0        17/32      149.7
+
+  The SFT model DOES terminate when sampled (17/32 at T=1.0) but never under
+  greedy (0/32). So <|assistant_end|> was learned - it just is not the argmax
+  token anywhere along the greedy path, because the model falls into a repetition
+  attractor first. That is a DECODING failure, not a missing capability, and the fix is
+  a decoding change (sampling / repetition penalty), not more SFT steps.
+  The base model terminates 2/32 even when sampled: it has no turn concept at all.
+  THIS is the format gain, and reporting only the greedy 0/8 would have hidden it entirely.
+
+================================================================================================
+C. REPRESENTATIVE FAILURES FROM THE FIXED SUITE
+================================================================================================
+
+  --- base ---
+   LOOP Q: What is the capital of France?
+        A: 'is a type of capital that is used to produce goods and services. It is used to produce goods and services. The capital of France is used to produce go'
+   LOOP Q: Write one sentence about the ocean.
+        A: "Write one sentence about the ocean. 1. The ocean is the ocean's largest ocean. 2. The ocean is the largest ocean. 3. The ocean is the largest ocean. 4"
+   LOOP Q: What is 2 + 2?
+        A: 'What is 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 '
+   LOOP Q: Name three colors.
+        A: 'Name three colors. 1. 2. 3. 4. 5. 5. 6. 7. 8. 8. 9. 9. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10.'
+   LOOP Q: Who wrote Romeo and Juliet?
+        A: 'o and Juliet? The name of the name is the name of the name of the name of the name of the name of the name of the name of the name of the name of the '
+
+  --- sft ---
+   LOOP Q: What is the capital of France?
+        A: 'The capital of France is Paris, a city known for its rich history and rich history. It is a city that is known for its rich history, rich history, and'
+   LOOP Q: Write one sentence about the ocean.
+        A: 'The ocean is a vast, vast vast expanse of vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expan'
+   LOOP Q: What is 2 + 2?
+        A: 'To find the value of 2, we can use the formula for the sum of an arithmetic series: The sum of an arithmetic series is given by the formula: The sum o'
+   LOOP Q: Name three colors.
+        A: 'The three colors are the colors that are the color of the color. The color is the color of the color, the color of the color, the color of the color, '
+   LOOP Q: Who wrote Romeo and Juliet?
+        A: 'The sentence "The Romeo and Juliet" is a bit wordy and could be improved for clarity and flow. Here\'s a revised version: "While Romeo and Juliet are b'
+
+  wrote logs/02_results.json

@@ -1,0 +1,26 @@
+{
+  "train_chars": 100000000,
+  "val_bytes": 3024593,
+  "results": {
+    "512": {
+      "train_s": 2.7,
+      "tokens": 1496850,
+      "bytes_per_token": 2.020638674549888
+    },
+    "2048": {
+      "train_s": 2.8,
+      "tokens": 995534,
+      "bytes_per_token": 3.0381614289416534
+    },
+    "8192": {
+      "train_s": 2.9,
+      "tokens": 757502,
+      "bytes_per_token": 3.9928515040224317
+    },
+    "32768": {
+      "train_s": 3.1,
+      "tokens": 645862,
+      "bytes_per_token": 4.683032907958666
+    }
+  }
+}

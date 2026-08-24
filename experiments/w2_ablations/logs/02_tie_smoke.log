@@ -1,0 +1,26 @@
+=== --tie-embeddings=0 ===
+wte                     : 12,582,912
+value_embeds            : 37,748,736
+lm_head                 : 12,582,912
+transformer_matrices    : 10,617,048
+scalars                 : 38
+total                   : 73,531,646
+Estimated FLOPs per token: 1.533557e+08
+Tokens : Scaling params ratio: 0.02
+Step 00000 | Validation bpb: 3.201590
+Step 00015 | Validation bpb: 2.994110
+Step 00030 | Validation bpb: 2.336091
+Total training time: 0.12m
+=== --tie-embeddings=1 ===
+wte                     : 12,582,912
+value_embeds            : 37,748,736
+lm_head                 : 12,582,912
+transformer_matrices    : 10,617,048
+scalars                 : 38
+total                   : 60,948,734
+Estimated FLOPs per token: 1.533557e+08
+Tokens : Scaling params ratio: 0.02
+Step 00000 | Validation bpb: 3.201462
+Step 00015 | Validation bpb: 2.842919
+Step 00030 | Validation bpb: 2.423873
+Total training time: 0.12m

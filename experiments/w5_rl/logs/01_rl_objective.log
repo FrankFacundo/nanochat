@@ -1,0 +1,140 @@
+2026-08-24 21:16:47,914 - nanochat.common - [32m[1mINFO[0m - Distributed world size: 1
+2026-08-24 21:16:47,915 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Loading model from /Users/frankfacundo/.cache/nanochat/chatsft_checkpoints/d6 with step 1499
+2026-08-24 21:16:48,026 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Building model with config: {'sequence_len': 512, 'vocab_size': 32768, 'n_layer': 6, 'n_head': 6, 'n_kv_head': 6, 'n_embd': 384, 'window_pattern': 'L'}
+Autodetected device type: mps
+==================================================================================================
+1. ONE ITEM -> MANY ROLLOUTS
+==================================================================================================
+  Scanning up to 12 training items for one with NONZERO advantage variance, i.e. a
+  group whose rewards are not unanimous. This scan is itself the measurement that
+  W5/B needs: the fraction of items that produce any gradient at all.
+
+   item  rewards summed   group   advantage variance
+      0               0       8     zero (unanimous)
+      1               0       8     zero (unanimous)
+      2               0       8     zero (unanimous)
+      3               0       8     zero (unanimous)
+      4               0       8     zero (unanimous)
+      5               0       8     zero (unanimous)
+      6               0       8     zero (unanimous)
+      7               0       8     zero (unanimous)
+      8               0       8     zero (unanimous)
+      9               0       8     zero (unanimous)
+     10               0       8     zero (unanimous)
+     11               0       8     zero (unanimous)
+
+  informative items: 0/12   all-wrong: 12   all-right: 0
+  -> 100% of rollout compute produced EXACTLY ZERO gradient.
+
+  No item in the scan had mixed rewards. The d6 SFT model solves essentially no
+  GSM8K at k=8, so REAL advantages are all zero and cannot exercise the
+  objective arithmetic. Falling back to SYNTHETIC advantages for the identity check
+  in section 3 - the arithmetic is what is being verified there, not the rewards.
+
+  question: Mimi picked up 2 dozen seashells on the beach.  Kyle found twice as many shells as Mimi and put them in his pocket. Leigh grabbed one-third of the she...
+  render_for_completion pops the reference answer and appends <|assistant_start|>,
+  so the model is primed to complete. prefix_length = 59 tokens.
+
+  8 rollouts at temperature=1.0, top_k=50:
+    i  gen tokens  reward  response tail
+    0         128     0.0  ..."t total to a total of 24505 seas. So, Leigh's original 24505 crew that"
+    1         128     0.0  ...' days. As xen38 increases, she had to find 3 pieces of cargo, which is'
+    2         128     0.0  ...'d|><|output_start|>1402<|output_end|>1402 seas. Thus, when Mimi picked'
+    3         128     0.0  ...'ython_start|>2*13<|python_end|><|output_start|>26<|output_end|>26. The'
+    4         128     0.0  ...'× Mimi picked only 5 times the number of times the number of spots the'
+    5         128     0.0  ...' is the 20th century. His total number of items he had not received is'
+    6         128     0.0  ...'t|>28<|output_end|>28 sets of "mimi" and "dat". Let\'s simplify it to 1'
+    7         128     0.0  ...'ut_start|>0<|output_end|>0 more ships in the marine life. In those who'
+
+==================================================================================================
+2. GROUP-MEAN ADVANTAGE (this is the entire 'GRPO' of nanochat's GRPO)
+==================================================================================================
+  [SYNTHETIC REWARDS - real rollouts were unanimous; verifying arithmetic only]
+  rewards    = ['0', '0', '0', '0', '0', '0', '0', '0']
+  mu         = mean(rewards) = 0.3750
+  advantages = rewards - mu  = ['+0.625', '-0.375', '+0.625', '-0.375', '-0.375', '+0.625', '-0.375', '-0.375']
+  sum(advantages) = +0.000000  <- exactly zero by construction
+
+  WHY THE GROUP MEAN IS A VALID BASELINE: the REINFORCE gradient is
+      E[ (R - b) * grad log pi ]  for ANY b that does not depend on the sampled action,
+  because E[ b * grad log pi ] = b * grad E[1] = 0. The group mean depends on the OTHER
+  samples for the same prompt, not on the action being credited, so it is unbiased and it
+  removes the per-prompt difficulty offset: an easy question where everything scores 1 and
+  a hard one where everything scores 0 both contribute zero, instead of flooding the update
+  with a constant that only reflects question difficulty.
+
+  WHEN ALL REWARDS ARE EQUAL: mu == r, so every advantage is 0, pg_obj is 0, and the
+  gradient is EXACTLY zero - the item contributes nothing but still costs a full set of
+  rollouts plus a forward/backward. That is the central efficiency problem of this method:
+  fully-solved and fully-failed items are pure waste.
+  this item: all rewards equal? False  -> nonzero gradient, item is informative
+
+==================================================================================================
+3. THE OBJECTIVE, RECOMPUTED TWO WAYS
+==================================================================================================
+  ids (8, 187) -> inputs (8, 186), targets (8, 186)
+  Engine returns mask=0 for prompt tokens AND for forced tool-use tokens, so targets
+  is -1 there and those positions contribute nothing (chat_rl.py comment).
+  supervised positions per rollout: [128, 128, 116, 114, 128, 128, 125, 115]
+
+   rollout   advantage    sum_t log p    A * sum_t log p
+         0      +0.625       -282.547           -176.592
+         1      -0.375       -253.557            +95.084
+         2      +0.625       -119.706            -74.816
+         3      -0.375       -147.554            +55.333
+         4      -0.375       -198.650            +74.494
+         5      +0.625       -288.984           -180.615
+         6      -0.375       -258.508            +96.940
+         7      -0.375       -142.490            +53.434
+
+  num_valid (all rollouts) = 982
+  pg_obj from chat_rl.py code path : -0.057778802
+  pg_obj from  sum_i A_i*sum_t logp / num_valid : -0.057778794
+  |difference| = 7.45e-09
+  loss = -pg_obj = +0.057778802
+
+  DERIVATION of -A * sum_t log p:
+    maximise J = E_y~pi [ A(y) ].  REINFORCE: grad J = E[ A(y) * grad log pi(y|x) ]
+    and log pi(y|x) = sum_t log p(y_t | y_<t, x)  (chain rule).
+    So the surrogate whose gradient equals grad J is   sum_i A_i * sum_t log p_it,
+    and since optimizers MINIMISE, the loss is its negative:  -A * sum_t log p.
+    logp is obtained as -model(..., loss_reduction='none') because cross_entropy returns
+    NLL; ignore_index=-1 already zeroes the masked positions, so no extra masking is needed.
+
+==================================================================================================
+4. NORMALIZATION: token-level (DAPO style), not sequence-level
+==================================================================================================
+  nanochat divides ONE total by num_valid summed over the whole group:
+     pg = sum_i A_i * sum_t logp_it  /  sum_i T_i        = -0.057778802
+  sequence-level normalization would instead average per-sequence means:
+     pg = (1/N) sum_i A_i * (sum_t logp_it / T_i)        = -0.048160374
+  lengths this batch: [128, 128, 116, 114, 128, 128, 125, 115]
+  Token-level weighting means a LONG rollout contributes proportionally more gradient
+  than a short one with the same advantage. If correct answers are systematically
+  longer (they usually are - more reasoning steps), token-level normalization
+  quietly amplifies a length preference on top of the correctness signal. This is the
+  same structural bias as DPO's summed log-probs (W4/01 section 6), arriving by a
+  different route, and it is why response length must be logged next to reward.
+
+==================================================================================================
+5. WHAT nanochat OMITS FROM GRPO / PPO (from the file's own docstring, verified in code)
+==================================================================================================
+  component                          PPO/GRPO                   nanochat                          
+  ---------------------------------- -------------------------- ----------------------------------
+  KL to a reference policy           trust region term          ABSENT - no reference model loaded
+  importance ratio + clip            pi_new/pi_old, clipped     ABSENT - strictly on-policy       
+  advantage normalization            (r-mu)/sigma  z-score      (r-mu) only, no sigma divide      
+  normalization level                sequence-level             token-level (DAPO style)          
+  value network / GAE                critic estimates V(s)      ABSENT - group mean is the baseline
+  multiple epochs per batch          yes, hence the ratio       one pass, so no ratio is needed   
+
+  CONSEQUENCES, not just differences:
+   - No KL and no clip means NOTHING bounds how far the policy moves from the SFT model. The
+     only brakes are the LR and the horizon. Capability retention (W3/02-style pretraining
+     bpb) must therefore be measured explicitly; RL here can silently destroy the base model.
+   - Dropping the sigma divide keeps the update magnitude proportional to how much reward
+     actually varies. With binary rewards and group size k, sigma is tiny whenever the group
+     is nearly unanimous, and dividing by it would explode those updates. This is a
+     deliberate stability trade: less normalized, but far less spiky.
+   - Strictly on-policy means every gradient step needs fresh rollouts, which is why the RL
+     stage is dominated by GENERATION time, not backward time.

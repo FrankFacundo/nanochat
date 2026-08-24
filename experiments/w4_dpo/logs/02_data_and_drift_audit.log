@@ -1,0 +1,84 @@
+2026-08-24 21:11:53,207 - nanochat.common - [32m[1mINFO[0m - Distributed world size: 1
+2026-08-24 21:11:53,207 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Loading model from /Users/frankfacundo/.cache/nanochat/chatsft_checkpoints/d6 with step 1499
+2026-08-24 21:11:53,533 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Building model with config: {'sequence_len': 512, 'vocab_size': 32768, 'n_layer': 6, 'n_head': 6, 'n_kv_head': 6, 'n_embd': 384, 'window_pattern': 'L'}
+Autodetected device type: mps
+================================================================================================
+1. BUILDING THE TWO CANDIDATE PREFERENCE DATASETS
+================================================================================================
+  built 40 pairs for each dataset from GSM8K train
+
+  DATA CARD
+  dataset                     n     chosen tokens   rejected tokens   mean diff
+  D1 corrupted-answer        40      80.1 +-33.9       80.1 +-33.9         +0.0
+  D2 model-vs-reference      40      80.1 +-33.9      130.0 +-32.0        -49.9
+
+================================================================================================
+2. SHORTCUT DETECTOR: can LENGTH ALONE predict the preference label?
+================================================================================================
+  Fit the single best length threshold on the pairs and report its accuracy. A
+  preference dataset that a 1-feature classifier solves is a dataset where DPO can
+  raise preference accuracy without learning anything about quality.
+
+  dataset                    best length-only accuracy                      verdict
+  D1 corrupted-answer                           50.0% length-controlled (all ties)
+  D2 model-vs-reference                         85.0%            SHORTCUT-SOLVABLE
+
+================================================================================================
+3. DOES THE REFERENCE MODEL ALREADY RANK THESE PAIRS? (is there anything to learn?)
+================================================================================================
+  D1 corrupted-answer      pi_ref ranks chosen > rejected on 40/40 pairs = 100.0%
+      mean log pi_ref(chosen) =   -153.06 over 81.1 tokens (-1.888/token)
+      mean log pi_ref(rejected)=   -164.38 over 81.1 tokens (-2.027/token)
+  D2 model-vs-reference    pi_ref ranks chosen > rejected on 21/40 pairs = 52.5%
+      mean log pi_ref(chosen) =   -153.06 over 81.1 tokens (-1.888/token)
+      mean log pi_ref(rejected)=   -187.20 over 131.0 tokens (-1.429/token)
+
+  A starting accuracy near 50% means the pairs carry signal DPO can actually move.
+  Near 100% means the reference already agrees and DPO will mostly saturate (loss ~0,
+  gradient ~0) - a dataset that looks great on preference accuracy and teaches nothing.
+
+================================================================================================
+4. LENGTH vs MARGIN CORRELATION (the drift audit that matters)
+================================================================================================
+  D1 corrupted-answer      corr(length diff, log-prob diff) = undefined (length difference is identically 0 by construction - that is the point of D1)
+  D2 model-vs-reference    corr(length diff, log-prob diff) = -0.902
+
+  Because log pi is a SUM of negative terms, a response that is N tokens longer pays
+  roughly N * (mean per-token nats) extra. A strong correlation means the preference
+  margin DPO optimises is largely a length signal wearing a quality costume.
+  D1 exists precisely to give a length-controlled comparison against D2.
+
+================================================================================================
+5. THE STUDY (pre-registered, before any DPO run)
+================================================================================================
+  SPLIT: pairs are grouped by SOURCE PROBLEM before splitting. A random pair-level split
+    would put the same GSM8K question in train and validation with different rejected
+    responses, and validation preference accuracy would then measure memorisation.
+    80/20 by problem id, frozen and hashed before the first run.
+
+  ARMS (all from the same SFT parent used above, step 1499):
+    beta in {0.01, 0.1, 0.5}       - the KL leash. W4/01 section 5 predicts near-zero
+                                     learning at 0.01 and label-noise domination at 0.5.
+    label corruption in {0%, 15%} - flip the chosen/rejected assignment on a random 15%.
+                                     If validation preference accuracy barely moves, the
+                                     metric is being driven by a shortcut, not the labels.
+                                     This is the single cheapest test for D2 model-vs-reference,
+                                     whose length-only accuracy is 85%.
+    dataset in {D1, D2}            - length-controlled vs length-confounded, same protocol.
+
+  METRICS, read jointly and never singly:
+    preference accuracy (train AND held-out)  - the thing being optimised
+    reward margin                             - beta*(logratio), saturation detector
+    KL PROXY: mean (log pi_theta - log pi_ref) on held-out RESPONSES. This is exactly the
+      quantity DPO's derivation constrains, and dpo.py already returns it as
+      chosen_reward/beta. If it grows without bound, the leash has snapped.
+    mean response length                      - the primary drift channel
+    CAPABILITY RETENTION: pretraining val BPB, base vs post-DPO, identical bytes - the same
+      forgetting measurement used in W3/02, where SFT alone already cost +0.52 bpb.
+
+  DECISION RULE: a beta is preferred only if it improves held-out preference accuracy AND
+    keeps the KL proxy bounded AND does not shift mean length by more than the seed noise.
+    An accuracy gain accompanied by a length shift is reported as a length effect, not a
+    quality effect, unless it survives on D1.
+
+  wrote logs/02_audit.json

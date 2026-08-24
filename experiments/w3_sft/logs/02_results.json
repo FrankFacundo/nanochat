@@ -1,0 +1,89 @@
+{
+  "bpb": {
+    "base": 1.1449642331717709,
+    "sft": 1.6665157406510165
+  },
+  "forgetting": 0.5215515074792456,
+  "format": {
+    "base": {
+      "terminated": 0,
+      "mean_len": 200.0,
+      "degen": 8
+    },
+    "sft": {
+      "terminated": 0,
+      "mean_len": 200.0,
+      "degen": 8
+    }
+  },
+  "samples": {
+    "base": [
+      [
+        "What is the capital of France?",
+        " is a type of capital that is used to produce goods and services. It is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods and services. The capital of France is used to produce goods"
+      ],
+      [
+        "Write one sentence about the ocean.",
+        "Write one sentence about the ocean. 1. The ocean is the ocean's largest ocean. 2. The ocean is the largest ocean. 3. The ocean is the largest ocean. 4. The ocean is the largest ocean. 5. The ocean is the largest ocean. 6. The ocean is the largest ocean. 7. The ocean is the largest ocean. 8. The ocean is the largest ocean. 9. The ocean is the largest ocean. 10. The ocean is the largest ocean. 11. The ocean is the largest ocean. 12. The ocean is the largest ocean. 13. The ocean is the largest ocean. 14. The ocean is the largest ocean. 15. The ocean is the largest ocean. 16. The ocean is the largest ocean. 17. The ocean is the largest ocean. 18. The ocean is the largest ocean. 19. The ocean is the largest ocean. "
+      ],
+      [
+        "What is 2 + 2?",
+        "What is 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2? 2 + 2?"
+      ],
+      [
+        "Name three colors.",
+        "Name three colors. 1. 2. 3. 4. 5. 5. 6. 7. 8. 8. 9. 9. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. "
+      ],
+      [
+        "Who wrote Romeo and Juliet?",
+        "o and Juliet? The name of the name is the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of the name of"
+      ],
+      [
+        "Explain gravity to a child in one sentence.",
+        " explain gravity to a child in one sentence. 1. The child is in the same sentence. 2. The child is in the same sentence. 3. The child is in the same sentence. 4. The child is in the same sentence. 5. The child is in the same sentence. 6. The child is in the same sentence. 7. The child is in the same sentence. 8. The child is in the same sentence. 9. The child is in the same sentence. 10. The child is in the same sentence. 11. The child is in the same sentence. 12. The child is in the same sentence. 13. The child is in the same sentence. 14. The child is in the same sentence. 15. The child is in the same sentence. 16. The child is in the same sentence. 17. The child is in the same sentence. 18. The"
+      ],
+      [
+        "Translate 'hello' into Spanish.",
+        "Translate 'hello' into Spanish. 1. 2. 3. 4. 5. 6. 7. 8. 8. 9. 9. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10. 10"
+      ],
+      [
+        "What is the chemical symbol for gold?",
+        " are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They are the most common chemical symbol for gold. They"
+      ]
+    ],
+    "sft": [
+      [
+        "What is the capital of France?",
+        "The capital of France is Paris, a city known for its rich history and rich history. It is a city that is known for its rich history, rich history, and rich history. The capital of France is Paris, a city known for its rich history, rich history, and rich history.\n\nThe capital of France is Paris, a city known for its rich history, rich history, and rich history. It is a city that is known for its rich history, rich history, and rich history. Paris is a city that is known for its rich history, rich history, and rich history, with its rich history and rich history.\n\nThe capital of France is Paris, a city known for its rich history, rich history, and rich history. It is a city that is known for its rich history, rich history, and rich history. Paris is a city that is known for its rich history, rich history, and rich history. It is a city that is known for its rich history, rich"
+      ],
+      [
+        "Write one sentence about the ocean.",
+        "The ocean is a vast, vast vast expanse of vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expanse, vast expan"
+      ],
+      [
+        "What is 2 + 2?",
+        "To find the value of 2, we can use the formula for the sum of an arithmetic series: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by the formula: \n\nThe sum of an arithmetic series is given by"
+      ],
+      [
+        "Name three colors.",
+        "The three colors are the colors that are the color of the color. The color is the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of the color, the color of"
+      ],
+      [
+        "Who wrote Romeo and Juliet?",
+        "The sentence \"The Romeo and Juliet\" is a bit wordy and could be improved for clarity and flow. Here's a revised version:\n\n\"While Romeo and Juliet are both of the most iconic and iconic landmarks, they have a rich history and a rich history of Romeo and Juliet. The Roman Empire, which is a testament to the power of Romeo and the power of Romeo, is a testament to the power of Romeo and the power of Romeo.\"\n\nI made a few changes to improve the sentence:\n\n- Changed \"The Romeo and Juliet\" to \"The Romeo and Juliet\" to make the language more concise and formal.\n- Changed \"The Romeo and Juliet\" to \"The Roman Empire\" to make the language more concise and formal.\n- Changed \"The Roman Empire\" to \"The Roman Empire\" to make the language more precise and formal.\n- Changed \"The Roman Empire\" to \"The Roman"
+      ],
+      [
+        "Explain gravity to a child in one sentence.",
+        "The gravity of a child in one sentence is a classic example of a child's mass. It's a classic example of a child's mass, and it's a classic example of a child's mass. The gravity of a child is a classic example of a child's mass, and it's a classic example of a child's mass.\n\nThe child's mass is a classic example of a child's mass, and it's a classic example of a child's mass. The child's mass is a classic example of a child's mass, and it's a classic example of a child's mass. The child's mass is a classic example of a child's mass, and it's a classic example of a child's mass.\n\nThe child's mass is a classic example of a child's mass, and it's a classic example of a child's mass. The child's mass is a classic example of a child's mass, and it's a classic example of a child's mass. The child"
+      ],
+      [
+        "Translate 'hello' into Spanish.",
+        "To translate 'hello' into Spanish, we can use the concept of \"eat\" or \"eat\" in Spanish. \n\nIn Spanish, \"eat\" is a Spanish phrase that means \"eat\" or \"eat\" in Spanish. It's a way of expressing the idea that \"eat\" or \"eat\" in Spanish.\n\nIn Spanish, \"eat\" is a Spanish phrase that means \"eat\" or \"eat\" in Spanish. It's a way of expressing the idea that \"eat\" or \"eat\" in Spanish.\n\nIn Spanish, \"eat\" is a Spanish phrase that means \"eat\" or \"eat\" in Spanish. It's a way of expressing the idea that \"eat\" or \"eat\" in Spanish.\n\nIn Spanish, \"eat\" is a Spanish phrase that means \"eat\" or \"eat\" in Spanish. It's a way of expressing the idea that"
+      ],
+      [
+        "What is the chemical symbol for gold?",
+        "The chemical symbol for gold is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold. This symbol is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold.\n\nThe chemical symbol for gold is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold. This symbol is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold.\n\nThe chemical symbol for gold is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold. This symbol is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold.\n\nThe chemical symbol for gold is often referred to as the \"trege\" symbol, which is a symbol of gold in the form of gold"
+      ]
+    ]
+  }
+}

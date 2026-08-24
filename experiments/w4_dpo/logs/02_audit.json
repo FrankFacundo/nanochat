@@ -1,0 +1,30 @@
+{
+  "D1 corrupted-answer": {
+    "name": "D1 corrupted-answer",
+    "n": 40,
+    "chosen_len": [
+      80.075,
+      33.86619811847796
+    ],
+    "rejected_len": [
+      80.075,
+      33.86619811847796
+    ],
+    "length_only_acc": 0.5,
+    "length_margin_corr": NaN
+  },
+  "D2 model-vs-reference": {
+    "name": "D2 model-vs-reference",
+    "n": 40,
+    "chosen_len": [
+      80.075,
+      33.86619811847796
+    ],
+    "rejected_len": [
+      129.975,
+      31.95268963639837
+    ],
+    "length_only_acc": 0.85,
+    "length_margin_corr": -0.9015249247307549
+  }
+}

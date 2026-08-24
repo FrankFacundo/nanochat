@@ -1,0 +1,23 @@
+d6: n_embd=384 n_head=6 seq=512 window=L
+
+  vocab  padded |        wte  value_emb    lm_head     blocks scalars       TOTAL |   matmul_p   FLOPs/tok
+----------------------------------------------------------------------------------------------------------
+   4096    4096 |  1,572,864  4,718,592  1,572,864 10,617,048      38  18,481,406 | 12,189,936  87,295,392
+   8192    8192 |  3,145,728  9,437,184  3,145,728 10,617,048      38  26,345,726 | 13,762,800  96,732,576
+  16384   16384 |  6,291,456 18,874,368  6,291,456 10,617,048      38  42,074,366 | 16,908,528 115,606,944
+  32768   32768 | 12,582,912 37,748,736 12,582,912 10,617,048      38  73,531,646 | 23,199,984 153,355,680
+  65536   65536 | 25,165,824 75,497,472 25,165,824 10,617,048      38 136,446,206 | 35,782,896 228,853,152
+ 100352  100352 | 38,535,168 115,605,504 38,535,168 10,617,048      38 203,292,926 | 49,152,240 309,069,216
+
+Invariant tensors (identical at every vocab): transformer_matrices=10,617,048, scalars=38
+Vocab-dependent tensors: wte, lm_head, and 3 value_embeds of width kv_dim=384
+  => d(params)/d(vocab) = n_embd + n_embd + 3*384 = 1920 params per extra token id
+  => d(FLOPs/tok)/d(vocab) = 6 * n_embd (lm_head only; embeddings are lookups) = 2304
+
+Relative to vocab=32768:
+  vocab=  4096: total params x0.251   matmul x0.525   FLOPs/token x0.569
+  vocab=  8192: total params x0.358   matmul x0.593   FLOPs/token x0.631
+  vocab= 16384: total params x0.572   matmul x0.729   FLOPs/token x0.754
+  vocab= 32768: total params x1.000   matmul x1.000   FLOPs/token x1.000
+  vocab= 65536: total params x1.856   matmul x1.542   FLOPs/token x1.492
+  vocab=100352: total params x2.765   matmul x2.119   FLOPs/token x2.015

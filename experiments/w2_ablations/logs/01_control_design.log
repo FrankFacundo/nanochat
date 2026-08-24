@@ -1,0 +1,113 @@
+==============================================================================================
+FAMILY 1 - WEIGHT DECAY (optimization)
+==============================================================================================
+  CAUSAL QUESTION: does increasing weight decay on the transformer matrices reduce
+    held-out bpb at a fixed 600-step / 9.83M-token budget, or does it only shrink the
+    train-val gap without improving generalization at this (undertrained) horizon?
+  MECHANISM: decay shrinks weights toward zero each step, lowering effective capacity
+    and the norm of the residual stream, which can act as a regularizer - but only for
+    the parameters it is actually applied to.
+  PREDICTION: at 3.5 tokens-per-param (5.7x undertrained, see W1/05) the model is
+    capacity-limited, not overfitting, so MORE decay should HURT: wd=0.56 > wd=0.28 > wd=0
+    in final val bpb, with wd=0 within noise of wd=0.28.
+  FALSIFIER: wd=0.56 beats wd=0.28 by more than 3 seed-sigma, or wd=0 is clearly worst.
+
+  HIDDEN JOINT INTERVENTION #1 - which parameters --weight-decay actually reaches.
+Scaling the LR for the AdamW parameters ∝1/√(384/768) = 1.414214
+     group   kind  weight_decay      #params   representative tensors
+         0  adamw          0.01   12,582,912   lm_head.weight
+         1  adamw         0.001   12,582,912   transformer.wte.weight
+         2  adamw          0.01   37,748,736   value_embeds.1.weight, value_embeds.3.weight, value_
+         3  adamw          0.05            6   resid_lambdas
+         4  adamw           0.0            6   x0_lambdas
+         5  adamw           0.0           26   backout_lambda, smear_gate.weight, smear_lambda
+         6   muon          0.28          216   transformer
+         7   muon          0.28    3,538,944   transformer
+         8   muon          0.28    3,538,944   transformer
+         9   muon          0.28    3,538,944   transformer
+
+    --weight-decay reaches 10,617,048 of 73,531,646 params = 14.4%.
+    Every AdamW group carries a HARDCODED decay (0.01 / 0.001 / 0.01 / 0.05 / 0 / 0)
+    that the CLI flag cannot touch (nanochat/gpt.py setup_optimizer). So w2-wd-zero is
+    NOT 'no weight decay' - it is 'no decay on the 14.4% of params that are matrices,
+    unchanged decay on the 85.6% that are embeddings and lm_head'.
+
+  HIDDEN JOINT INTERVENTION #2 - the value you type is not the value applied.
+    base_train.py:308 rescales it: lambda = wd * sqrt(B/B_ref) * (D_ref/D_target)
+    base_train.py:392 then anneals it on a cosine: lambda(t) = lambda * 0.5*(1+cos(pi*t/T))
+      --weight-decay    -> scaled   lambda(0)  lambda(T/2)   lambda(T)   time-avg
+                 0.0     0.000000    0.000000     0.000000    0.000000   0.000000
+                0.28     0.234903    0.234903     0.117451    0.000000   0.117451
+                0.56     0.469806    0.469806     0.234903    0.000000   0.234903
+    The applied decay ends at exactly 0 in every arm, so the arms differ only in the
+    FIRST half of training. Doubling the flag doubles the integral, not the endpoint.
+
+  HIDDEN JOINT INTERVENTION #3 - it is coupled to batch size and to the horizon.
+     total_batch_size   scaled lambda @0.28       num_iterations   scaled lambda @0.28
+                8,192              0.166101                  600              0.234903
+               16,384              0.234903                1,250              0.234903
+               32,768              0.332203               10,000              0.234903
+    (the horizon enters through D_target, which depends on the MODEL not the run,
+     so changing --num-iterations does NOT rescale lambda - but changing --depth does.
+     A wd ablation is therefore only valid within one fixed depth and batch size.)
+
+  CORRECT BUDGET AXIS: fixed STEPS. Weight decay is a per-update operation, so the
+    comparison must hold the number of updates constant. All three arms are already
+    600 steps x 16,384 tokens with identical architecture, so params and FLOPs/token
+    are identical too - this is the one family where fixed-step IS compute-matched.
+
+==============================================================================================
+FAMILY 2 - DEPTH vs WIDTH (architecture)
+==============================================================================================
+  CAUSAL QUESTION: at a fixed compute budget, is bpb better spent on more layers
+    (d8 x 384) or more width (d6 x 512) relative to the d6 x 384 control?
+  MECHANISM: depth adds sequential nonlinear composition; width adds per-layer capacity
+    and attention head count. They cost compute differently: depth is linear in layers,
+    width is quadratic in the block matrices but linear in the vocab tensors.
+  PREDICTION: at 600 steps every arm is deeply undertrained, so the arm with the most
+    parameters per FLOP wins on bpb-per-step and the SMALLEST arm wins on bpb-per-minute.
+  FALSIFIER: the ranking is identical under fixed-step and fixed-FLOP accounting.
+
+                        arm  layers  n_embd  heads       blocks  total params    FLOPs/tok
+      w2-depth8-fixed-width       8     384      6   14,156,064    89,653,578  179,308,368
+         w1-pilot (control)       6     384      6   10,617,048    73,531,646  153,355,680
+    w2-width512-fixed-depth       6     512      8   18,874,656   102,760,774  232,785,744
+
+  WHY FIXED-STEP IS NOT COMPUTE-MATCHED at 600 steps x 16,384 tokens:
+                        arm  total FLOPs  vs control  params vs ctrl  FLOP-matched steps
+      w2-depth8-fixed-width    1.763e+15       1.17x           1.22x                 513
+         w1-pilot (control)    1.508e+15       1.00x           1.00x                 600
+    w2-width512-fixed-depth    2.288e+15       1.52x           1.40x                 395
+
+  => at 600 fixed steps the width-512 arm is handed 1.52x the compute
+     and 1.40x the parameters. If it wins, nothing has been shown.
+     Run each arm with --target-flops=1.508e15 --num-iterations=-1 instead, or use the
+     FLOP-matched step counts above.
+
+  THE nanochat-SPECIFIC TRAP: 'params' is dominated by vocab tensors, not architecture.
+        w2-depth8-fixed-width: vocab tensors  75,497,472 (84.2%)  architecture 14,156,064 (15.8%)
+           w1-pilot (control): vocab tensors  62,914,560 (85.6%)  architecture 10,617,048 (14.4%)
+      w2-width512-fixed-depth: vocab tensors  83,886,080 (81.6%)  architecture 18,874,656 (18.4%)
+    Total parameter count is therefore almost useless for ranking these arms - it moves
+    1.40x while the thing under test (blocks) moves 1.78x.
+    base_train.py:271 already knows this: it uses transformer_matrices + lm_head as
+    'scaling params'. Report THAT, plus FLOPs/token, and never bare total params.
+
+==============================================================================================
+APPENDIX - why head-count and context arms need different care again
+==============================================================================================
+          w1-pilot heads=6 head_dim= 64 seq=  512 params= 73,531,646 FLOPs/tok=153,355,680
+        w2-heads-4 heads=4 head_dim= 96 seq=  512 params= 73,531,574 FLOPs/tok=153,355,248
+        w2-heads-3 heads=3 head_dim=128 seq=  512 params= 73,531,538 FLOPs/tok=153,355,032
+    w2-context-256 heads=6 head_dim= 64 seq=  256 params= 73,531,646 FLOPs/tok=146,277,792
+   w2-context-1024 heads=6 head_dim= 64 seq= 1024 params= 73,531,646 FLOPs/tok=167,511,456
+  Heads: params and FLOPs are essentially IDENTICAL across 3/4/6 heads (n_embd is fixed,
+    so q/k/v/proj shapes are unchanged; only ve_gate differs by a few dozen params).
+    So the head ablation IS compute-matched at fixed steps - but head_dim changes from
+    64 to 96 to 128, which changes the RoPE frequency spectrum (gpt.py _precompute_rotary_
+    embeddings uses head_dim). 'More heads' and 'different positional encoding' are
+    confounded, and no budget axis fixes that; only a control that holds head_dim fixed does.
+  Context: FLOPs/token moves with seq_len through the attention term, AND device_batch_size
+    is changed in the catalog to keep memory constant (256->bs64, 1024->bs16), AND the
+    packing distribution changes because documents are bin-packed into sequences.
+    Three interventions in one flag.

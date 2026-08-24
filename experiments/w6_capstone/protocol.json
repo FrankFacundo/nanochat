@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "frozen_at": "2026-08-24T21:21:04+0200",
+  "objective": {
+    "metric": "validation bits-per-byte (val_bpb) at the final step",
+    "direction": "lower is better",
+    "budget": "30 minutes wall clock of scripts.base_train on the machine below",
+    "tiebreak": "if two candidates are within the measured noise floor, the one with fewer total parameters wins; if still tied, the earlier commit wins"
+  },
+  "timer": {
+    "starts": "the moment scripts.base_train is invoked by entrypoint.sh",
+    "stops": "when the process exits",
+    "includes": [
+      "model construction",
+      "data loading",
+      "training",
+      "all in-run evals"
+    ],
+    "excludes": [
+      "tokenizer training",
+      "dataset download",
+      "the one-time sealed-test eval"
+    ],
+    "rule": "num_iterations must be chosen in advance. A run that overruns 30:00 is VOID, not truncated - truncating after seeing the clock is selection on the outcome."
+  },
+  "hardware": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "processor": "arm",
+    "python": "3.10.20",
+    "torch": "2.9.1",
+    "device": "mps",
+    "rule": "all candidate runs and the final run must be on THIS machine, on AC power, with no other training process running (throughput varied 3.6x in W0/01)."
+  },
+  "data": {
+    "dir": "/Users/frankfacundo/.cache/nanochat/base_data_climbmix",
+    "n_shards_total": 171,
+    "val_shard": "shard_06542.parquet",
+    "sealed_test_shards": [
+      "shard_00168.parquet",
+      "shard_00169.parquet"
+    ],
+    "enforcement": "export NANOCHAT_SEALED_SHARDS='shard_00168.parquet,shard_00169.parquet' for EVERY search run; dataset.list_parquet_files then removes them from train AND val.",
+    "sealed_sha256": {
+      "shard_00168.parquet": "782cde9d1e4f429188c663736804b8acf682df4b954199ae89cac443118a9219",
+      "shard_00169.parquet": "aaaeff0f94613600762c7cfc7d79a4c1ded9a4821f0aa47b8d94949ed943430c"
+    },
+    "val_sha256": "c9d9d2d6b423edb0aebb05d74eb6295b3fadb37874186df9553b74cf7baeb290"
+  },
+  "tokenizer": {
+    "path": "/Users/frankfacundo/.cache/nanochat/tokenizer/tokenizer.pkl",
+    "sha256": "ae73c5f7a960edc56022dfd46a653df2b9b38d84456e5e9f48eb5e02a60c21c2",
+    "token_bytes_sha256": "9a49ac1dfab682dcf175a38d0cbd4ebc865af54d7d7296cb4b49bbd5c5289494",
+    "rule": "frozen. Re-running tok_train invalidates every prior number (W0/02 audit b)."
+  },
+  "code": {
+    "commit": "463421072a0323fb62f4b716aff107e0fb4b15f3",
+    "dirty": true,
+    "rule": "the final run must be made from a CLEAN tree at a tagged commit. A dirty tree means repo_commit does not identify the code that ran (W0/02 section 5)."
+  },
+  "checkpoints": {
+    "limit": "one checkpoint per candidate, final step only (--save-every=-1)",
+    "rule": "no mid-run checkpoint may be selected on val_bpb. The endpoint is the endpoint; min-over-N is a biased estimator (W0/02 section 4c)."
+  },
+  "precomputation": {
+    "allowed": [
+      "tokenizer training",
+      "dataset download",
+      "any analysis that touches no sealed shard",
+      "meta-device parameter/FLOP accounting"
+    ],
+    "forbidden": [
+      "warm-starting from a checkpoint trained outside the 30 minutes",
+      "caching tokenized batches that took >30 min to build",
+      "any read of the sealed shards before the candidate is locked"
+    ]
+  },
+  "retries": {
+    "rule": "a run may be repeated ONLY for a documented infrastructure failure (OOM, crash, thermal throttle detected as >2x median step time). The failure and the retry are both recorded. A run may never be repeated because the result was bad."
+  },
+  "noise_floor": {
+    "source": "experiments/w2_ablations/run_noise_floor.sh, 3 seeds of the pilot control",
+    "sigma_bpb": 0.003651,
+    "rule": "a candidate beats a baseline only if the gap exceeds 3 sigma.",
+    "seed_finals": [
+      1.526232,
+      1.52344,
+      1.530679
+    ],
+    "decision_threshold_bpb": 0.010953
+  },
+  "baselines": {
+    "official_d6": {
+      "what": "runs/runcpu.sh d6 config, 600 steps (the pilot control)",
+      "val_bpb": 1.526784,
+      "n_seeds": 3,
+      "cmd": "scripts.base_train --depth=6 --head-dim=64 --window-pattern=L --max-seq-len=512 --device-batch-size=32 --total-batch-size=16384 --num-iterations=600"
+    },
+    "best_single_intervention": {
+      "what": "the best single flag change found in the W2 portfolio, run alone",
+      "source": "experiments/w2_ablations/logs/arm_*.log",
+      "rule": "must be filled from the portfolio BEFORE the staged search begins, so the search has something to beat that is not just the default."
+    },
+    "simple_alternative": {
+      "what": "a d6 model trained for 30 minutes with NO changes except num_iterations set to whatever fits the budget",
+      "why": "the honest null: if the tuned candidate cannot beat 'just train longer', the search found nothing. This is the baseline most searches quietly omit."
+    }
+  },
+  "search": {
+    "stage_1_screen": "one run per single-factor candidate at 600 steps. Keep any candidate within 1 sigma of the best; discard the rest. No interactions yet.",
+    "stage_2_interactions": "pair the surviving factors (full factorial if <=3 survive, else a fold-over design). Interactions are the only reason stage 1 cannot be trusted alone: LR and batch size are already coupled by base_train (W2/01), so factors are not independent by default.",
+    "stage_3_budget": "re-run the top 2 configurations at the full 30-minute budget. Rankings at 600 steps do not transfer to 30 minutes - W1/05 showed the model is 5.7x undertrained, so short-horizon winners can be long-horizon losers.",
+    "candidate_lock": "after stage 3, write the winning config into entrypoint.sh, commit, and tag. No further edits. The lock is what makes the test valid.",
+    "final_test": "ONE evaluation of the locked candidate on the sealed shards, run once, reported whatever it says. Opening it twice converts it into a second validation split and it must be relabelled as such."
+  }
+}

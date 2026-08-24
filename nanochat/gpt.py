@@ -37,6 +37,9 @@ class GPTConfig:
     # Characters: L=long (full context), S=short (quarter context)
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
+    # Weight tying between the token embedding and the unembedding (lm_head).
+    # Default False preserves the untied nanochat baseline exactly.
+    tie_embeddings: bool = False
 
 
 def norm(x):
@@ -175,6 +178,7 @@ class GPT(nn.Module):
             "h": nn.ModuleList([Block(config, layer_idx) for layer_idx in range(config.n_layer)]),
         })
         self.lm_head = Linear(config.n_embd, padded_vocab_size, bias=False)
+        self.tie_weights()
         # Per-layer learnable scalars (inspired by modded-nanogpt)
         # resid_lambdas: scales the residual stream at each layer (init 1.0 = neutral)
         # x0_lambdas: blends initial embedding back in at each layer (init 0.0 = disabled)
@@ -216,8 +220,15 @@ class GPT(nn.Module):
             mlp.c_proj:      zeros
         """
 
+        # Re-establish weight tying: to_empty() rebuilt parameter storage and broke the alias.
+        self.tie_weights()
+
         # Embedding and unembedding
         torch.nn.init.normal_(self.transformer.wte.weight, mean=0.0, std=0.8)
+        # When tied, lm_head.weight IS wte.weight, so this second init overwrites the first and
+        # the shared tensor ends at the unembedding scale (std=0.001). That is the correct choice:
+        # the embedding path is followed by norm() (see forward), which is scale-invariant, while
+        # the logit path is not - std=0.8 would blow up the initial logits.
         torch.nn.init.normal_(self.lm_head.weight, mean=0.0, std=0.001)
 
         # Transformer blocks: uniform init with bound = sqrt(3) * std (same standard deviation as normal)
@@ -313,6 +324,22 @@ class GPT(nn.Module):
         window_sizes[-1] = (long_window, 0)
         return window_sizes
 
+    def tie_weights(self):
+        """
+        Share one (padded_vocab_size, n_embd) tensor between the token embedding and the
+        unembedding when config.tie_embeddings is set. nn.Module.parameters() dedups by
+        identity, so the tied tensor is optimized once while gradients from both the lookup
+        and the logit matmul accumulate into it.
+
+        This MUST be re-invoked after any operation that rebuilds parameter storage, because
+        those silently break the aliasing:
+          - Module.to_empty(device=...)          (the meta-device build path in base_train)
+          - load_state_dict(..., assign=True)    (the checkpoint path in checkpoint_manager)
+        Both are used by nanochat, so tying only in __init__ is not enough. Idempotent.
+        """
+        if getattr(self.config, "tie_embeddings", False):
+            self.lm_head.weight = self.transformer.wte.weight
+
     def get_device(self):
         return self.transformer.wte.weight.device
 
@@ -405,7 +432,11 @@ class GPT(nn.Module):
         lm_head = sum(p.numel() for p in self.lm_head.parameters())
         transformer_matrices = sum(p.numel() for p in self.transformer.h.parameters())
         scalars = self.resid_lambdas.numel() + self.x0_lambdas.numel() + self.smear_gate.weight.numel() + self.smear_lambda.numel() + self.backout_lambda.numel()
-        total = wte + value_embeds + lm_head + transformer_matrices + scalars
+        # When embeddings are tied, wte and lm_head are the SAME tensor. Report both group sizes
+        # (they each describe a real matmul/lookup) but count the storage only once in the total,
+        # so that 'total' keeps matching the optimizer's view of distinct parameters.
+        tied = self.lm_head.weight is self.transformer.wte.weight
+        total = wte + value_embeds + transformer_matrices + scalars + (0 if tied else lm_head)
         assert total == sum(p.numel() for p in self.parameters()), "Parameter count mismatch"
         return {
             'wte': wte,
@@ -424,10 +455,19 @@ class GPT(nn.Module):
         value_embeds_params = list(self.value_embeds.parameters())
         embedding_params = list(self.transformer.wte.parameters())
         lm_head_params = list(self.lm_head.parameters())
+        # When tied, wte.weight and lm_head.weight are one tensor. Registering it in two param
+        # groups would apply two AdamW updates (and two weight decays) per step, so keep it in
+        # exactly one group. We keep the unembedding group: its LR/betas/decay are tuned for the
+        # logit matmul, which is the scale-sensitive path (the embedding path is norm'd).
+        tied = self.lm_head.weight is self.transformer.wte.weight
+        if tied:
+            embedding_params = []
         resid_params = [self.resid_lambdas]
         x0_params = [self.x0_lambdas]
         smear_params = [self.smear_gate.weight, self.smear_lambda, self.backout_lambda]
-        assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params)
+        n_grouped = len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params)
+        assert len(list(self.parameters())) == n_grouped, f"optimizer coverage mismatch: {len(list(self.parameters()))} params vs {n_grouped} grouped"
+        assert len({id(p) for g in (matrix_params, embedding_params, lm_head_params, value_embeds_params, resid_params, x0_params, smear_params) for p in g}) == n_grouped, "a parameter appears in two optimizer groups"
 
         # Scale the LR for the AdamW parameters by ∝1/√dmodel (tuned for 768 dim model)
         dmodel_lr_scale = (model_dim / 768) ** -0.5

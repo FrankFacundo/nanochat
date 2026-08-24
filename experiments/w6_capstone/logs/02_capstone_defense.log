@@ -1,0 +1,132 @@
+====================================================================================================
+1. THE CLAIM, WITH ITS BUDGET AND EFFECT SIZE
+====================================================================================================
+  CLAIM: On this machine, for a d6 model (384 dim, 6 layers, 512 context, 32,768 vocab)
+  trained for 600 steps x 16,384 tokens = 9,830,400 tokens (1.508e15 FLOPs, ~5.7 min),
+  multiplying all four parameter-group learning rates by 2 lowers final validation
+  bits-per-byte from 1.526784 to 1.451009, an improvement of 0.075775 bpb.
+
+  Effect size: 21 sigma, against a noise floor of sigma = 0.003651 bpb measured from
+  3 seeds of the control run BEFORE any arm was interpreted.
+  Cost: zero. Identical parameters (73,531,646) and identical
+  FLOPs/token (153,355,680) as the control - only the LR values differ.
+
+  SCOPE, stated as part of the claim: d6, 600 steps, this data order, seed 42, MPS. It is
+  NOT a claim about nanochat's default LRs in general - those are tuned at d12 with a
+  524,288-token batch, and this budget is 32x smaller in batch and far shorter in horizon.
+
+====================================================================================================
+2. THE ABLATION LADDER (what each rung rules out)
+====================================================================================================
+  rung 0  smoke     30 steps          proved the pipeline records what it claims to record
+                                          (W0/02: summary.json recomputed from metrics.jsonl,
+                                           0 mismatches)
+  rung 1  noise       3 seeds x 600 st   sigma = 0.003651. Without this rung every number
+                                          below is uninterpretable.
+  rung 2  screen      4 arms x 600 st    lr-half +24s, lr-double -21s,
+                                          wd-zero +1.0s, tied +9s
+  rung 3  confirm     2 arms x 3000 st   control + lr-double as a PAIR at 5x budget
+  rung 4  sealed test 1 evaluation       shards 168/169, opened once, by entrypoint.sh --final
+
+  The ladder is monotone in cost and each rung can only be climbed after the one below
+  passed. The rung that actually did the work is rung 1: it converted "1.451 looks better
+  than 1.527" into "21 sigma", and it is the rung most portfolios skip.
+
+====================================================================================================
+3. VALIDATION vs TOKENS AND vs WALL TIME (they rank arms differently)
+====================================================================================================
+  arm           val_bpb  wall (m)   bpb gain   gain/min  rank by bpb  rank by gain/min
+  lr-double    1.451009      5.67  +0.075775  +0.013364            1                 1
+  control      1.526784      5.56  +0.000000  +0.000000            2                 2
+  wd-zero      1.530254      5.14  -0.003470  -0.000675            3                 3
+  tied         1.559273      5.00  -0.032489  -0.006498            4                 4
+  lr-half      1.612853      5.40  -0.086069  -0.015939            5                 5
+
+  arms whose rank changes between the two axes: none
+  A CHANGE THAT HELPS PER TOKEN BUT HURTS PER MINUTE: at this scale the clearest example
+  is not in the LR family (all arms cost the same FLOPs) but in the architecture family
+  measured in W2/01: w2-width512-fixed-depth has 1.40x the parameters and would be expected
+  to win per TOKEN, while costing 1.52x the FLOPs/token - so at fixed wall time it must beat
+  the control by more than 52% of the control's gain just to break even. Fixed-step results
+  systematically flatter the expensive arm; only the wall-time column prices it correctly.
+
+====================================================================================================
+4. THROUGHPUT TAILS, REPRODUCTION, AND THE TEST GAP
+====================================================================================================
+  THROUGHPUT TAIL: the 5000-step baseline (W1/05) ran tok/sec first=13,737 median=33,224
+  max=47,272, with 1.3% of steps below 80% of median. The control's own wall time varied
+  5.18m - 6.01m across three IDENTICAL runs (1.16x). Consequences:
+    - never compute a wall-time claim from mean step time; use total elapsed.
+    - a wall-time budget needs a margin: at 1.16x spread, a config planned to fill
+      30:00 exactly will overrun roughly half the time, and entrypoint.sh VOIDS overruns.
+
+  REPRODUCTION DIFFERENCE: the three control seeds differ by up to 0.007239 bpb.
+  A reproduction of any number here is a PASS if it lands within 2 sigma = 0.007302.
+  Note this understates true variance: nanochat seeds weight init only, not data order
+  (common.py), so these three runs saw identical batches in identical order.
+
+  THE TEST GAP: everything above is VALIDATION. Validation has been used for model
+  selection across every arm, so it is optimistically biased for the winner by roughly the
+  selection amount quantified in W2/04. The sealed shards (168, 169) were excluded from
+  train AND val via NANOCHAT_SEALED_SHARDS for every run and are opened exactly once, by
+  entrypoint.sh --final, which writes a SEALED_TEST_OPENED marker and refuses a second
+  opening. EXPECT the sealed number to be slightly worse than validation; report the gap.
+
+====================================================================================================
+5. STRONGEST CAUSAL INTERVENTION vs MOST LIKELY SELECTION NOISE
+====================================================================================================
+  STRONGEST : lr-half (all 4 group LRs x0.5) at +24 sigma.
+    Causal because it is a single-factor change with identical params, identical
+    FLOPs/token, identical data order, and a MONOTONE dose-response across
+    0.5x / 1x / 2x (1.6129 / 1.5268 / 1.4510).
+    A monotone response across three doses is much harder to explain by chance than
+    a single two-arm gap of the same size.
+  MOST LIKELY NOISE : wd-zero at +0.95 sigma - inside the floor.
+    Reported as a NULL, not as 'no effect': W2/01 showed the flag reaches only 14.4%
+    of parameters and is annealed to zero anyway, so the experiment had little power.
+
+====================================================================================================
+6. FIVE IDEAS DISCARDED, AND WHY (each one was actually tried in this lab)
+====================================================================================================
+  1. Per-token perplexity to compare tokenizers. DISCARDED: W1/02 trained four real
+     unigram LMs and showed token-PPL and BPB rank the same four models in EXACTLY
+     REVERSED order. Per-token normalisation divides by a tokenizer-chosen denominator.
+  2. Token-matched vocabulary comparison. DISCARDED: W1/04 showed equal tokens hands the
+     32,768-vocab arm +17.3% more text and +58.5% more compute. Replaced by an isoFLOP sweep.
+  3. `assistant_end in generated` as the SFT format metric. DISCARDED: engine.py strips
+     terminal tokens, so the test could NEVER fire. It scored 0/8 for both models and would
+     have been published as "SFT taught the model no format". Replaced by len < budget, and
+     then by a temperature sweep that found the real effect (17/32 vs 2/32).
+  4. Tying embeddings only in __init__. DISCARDED: to_empty() and load_state_dict(assign=True)
+     both silently break the alias. A 30-step smoke run showed the "tied" model reporting the
+     UNTIED parameter count - it would have trained untied while its metadata claimed otherwise.
+     Replaced by GPT.tie_weights(), re-invoked at both points, with regression tests 9 and 10.
+  5. Reporting `Minimum validation bpb` as the endpoint. DISCARDED: min-over-N is biased low
+     and the bias depends on the number of eval points, so two arms with different eval_every
+     are not comparable on it at all. Replaced by final-step bpb, pre-registered.
+  (bonus 6.) RL on GSM8K at d6. DISCARDED before spending the 45-80 minutes: W5/01 measured
+     0 of 12 items with non-unanimous rewards - 100% of rollout compute would produce exactly
+     zero gradient. The run would have produced a reward curve that was noise around zero.
+
+====================================================================================================
+7. THE CONCLUSION LEAST LIKELY TO SCALE BEYOND d6
+====================================================================================================
+  model                   total params  vocab tensors  vocab share  tying saves
+  d6  x384 (this lab)       73,531,646     62,914,560        85.6%        17.1%
+  d12 x768                 286,262,162    201,326,592        70.3%         8.8%
+  d20 x1280                896,534,946    503,316,480        56.1%         4.7%
+  d26 x1664              1,681,788,966    817,889,280        48.6%         3.2%
+
+  ANY conclusion that depends on the vocabulary tensors is the least transferable, because
+  their share of the model collapses with depth: 85.6% at d6 down to
+  48.6% at d26. Concretely:
+    - the tied-embeddings result is a d6 result. Tying removes 17.1% of a d6 but only
+      3.2% of a d26, so both the cost and the benefit shrink by ~4x.
+    - the vocabulary-size conclusion from W1 (bigger vocab costs 2.79x params for 17% fewer
+      tokens) inverts its economics at depth: the same 17% token saving costs proportionally
+      far less when the blocks dominate the parameter count.
+  Second least transferable: the LR result itself. It was measured at 5.7x undertrained
+  (W1/05, 3.53 tokens-per-scaling-param vs Chinchilla ~20). Short horizons systematically
+  favour aggressive learning rates because they never reach the regime where instability
+  bites. That is exactly what the rung-3 confirmation at 3000 steps is designed to test,
+  and it is the result I would bet against surviving to d20 at compute-optimal horizons.

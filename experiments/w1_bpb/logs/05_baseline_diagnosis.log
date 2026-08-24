@@ -1,0 +1,127 @@
+2026-08-24 20:35:53,099 - nanochat.common - [32m[1mINFO[0m - Distributed world size: 1
+2026-08-24 20:35:53,100 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Loading model from /Users/frankfacundo/.cache/nanochat/base_checkpoints/d6 with step 5000
+2026-08-24 20:35:53,183 - nanochat.checkpoint_manager - [32m[1mINFO[0m - Building model with config: {'sequence_len': 512, 'vocab_size': 32768, 'n_layer': 6, 'n_head': 6, 'n_kv_head': 6, 'n_embd': 384, 'window_pattern': 'L'}
+============================================================================================
+A. TENSOR SHAPES THROUGH ONE REAL BATCH (captured with forward hooks on the d6 checkpoint)
+============================================================================================
+Autodetected device type: mps
+  config: n_layer=6 n_embd=384 n_head=6 head_dim=64 vocab=32,768 seq_len=512
+
+  input  x : (4, 512)  torch.int64   (token ids, B x T)
+  target y : (4, 512)  torch.int64   (x shifted by one inside the dataloader)
+
+  module                                          input                 output            dtype
+  transformer.wte                              (4, 512)          (4, 512, 384)    torch.float32
+  transformer.h.0.attn.c_q                (4, 512, 384)          (4, 512, 384)    torch.float32
+  transformer.h.0.attn.c_k                (4, 512, 384)          (4, 512, 384)    torch.float32
+  transformer.h.0.attn.c_v                (4, 512, 384)          (4, 512, 384)    torch.float32
+  transformer.h.0.attn.c_proj             (4, 512, 384)          (4, 512, 384)    torch.float32
+  transformer.h.0.mlp.c_fc                (4, 512, 384)         (4, 512, 1536)    torch.float32
+  transformer.h.0.mlp.c_proj             (4, 512, 1536)          (4, 512, 384)    torch.float32
+  value_embeds.1                               (4, 512)          (4, 512, 384)    torch.float32
+  transformer.h.5.mlp.c_proj             (4, 512, 1536)          (4, 512, 384)    torch.float32
+  lm_head                                 (4, 512, 384)        (4, 512, 32768)    torch.float32
+
+  loss out : (2048,)  <- loss_reduction='none' gives one nat per target token
+  Reading the chain: ids (B,T) -> wte lookup (B,T,384) -> per layer q/k/v project to
+  (B,T,384) then reshape to 6 heads x 64 dims for attention -> c_proj back to
+  (B,T,384) -> MLP widens 4x to (B,T,1536) and back -> lm_head to (B,T,32,768) logits.
+  Note lm_head output width 32,768 = vocab padded to a multiple of 64.
+
+============================================================================================
+B. RECONCILE THE ACCOUNTING AGAINST WHAT THE RUN ITSELF PRINTED
+============================================================================================
+  quantity               printed by the run        recomputed here   match
+  total params                    7.353e+07              7.353e+07      OK
+  FLOPs/token                     1.534e+08              1.534e+08      OK
+  training tokens                 8.192e+07              8.192e+07      OK
+  total FLOPs                     1.256e+16              1.256e+16      OK
+  tokens:params                        3.53                   3.53      OK
+
+  Parameter breakdown (nanochat/gpt.py num_scaling_params):
+    wte                      12,582,912   17.1%
+    value_embeds             37,748,736   51.3%
+    lm_head                  12,582,912   17.1%
+    transformer_matrices     10,617,048   14.4%
+    scalars                          38    0.0%
+    total                    73,531,646  100.0%
+
+  tokens:scaling-params = 3.53 vs Chinchilla ~20.
+  This model is trained 5.7x SHORT of compute-optimal. That is the
+  single most important accounting fact for the diagnosis in part D.
+
+============================================================================================
+C. CURVE DIAGNOSIS (parsed from the run log, 5000 steps)
+============================================================================================
+  parsed 5000 training steps and 51 validation points
+
+  1) WARMUP: lrm rises 0.03 -> 1.00 and first reaches 1.00 at step 39
+     (--warmup-steps default is 40; base_train.py:370 returns (it+1)/warmup_iters).
+     Train loss over warmup: 10.3975 -> 7.6338. No spike, no NaN.
+  2) PLATEAU (constant LR): steps 39..1768, lrm pinned at 1.00.
+  3) WARMDOWN: begins step 1768 (35% through), lrm 0.99 -> 0.05 linearly.
+     val bpb across warmdown: 1.2928 -> 1.1638 (+0.1289), i.e. 6.4% of the total gain arrives in the final 65% of steps.
+
+  4) TRAIN vs VALIDATION on one axis (train nats/token -> bpb using 4.8096 bytes/token):
+       step  train loss  train bpb   val bpb      gap
+          0     10.3975     3.1189    3.1936  -0.0748
+       1000      4.3813     1.3142    1.3711  -0.0569
+       2000      4.1405     1.2420    1.2779  -0.0360
+       3000      3.9747     1.1923    1.2223  -0.0300
+       4000      3.8059     1.1416    1.1858  -0.0442
+       5000      3.7424     1.1226    1.1638  -0.0412
+     gap trend: first=-0.0748 mid=-0.0451 last=-0.0412
+     The gap stays NEGATIVE/near zero and does not widen -> validation is not being
+     abandoned by training. (Train loss is a running average over fresh, never-repeated
+     shards - epoch stayed 1 all run - so this is a fresh-data vs held-out comparison,
+     not a memorization test. That is why the gap can be <= 0.)
+
+  5) THROUGHPUT DRIFT: tok/sec first=13,737 median=33,224 min=13,737 max=47,272
+     64 of 5000 steps (1.3%) ran below 80% of median.
+     Wall time 41.6m; peak memory 11,716 MiB.
+     -> the tail is real and asymmetric, so mean tok/sec OVERSTATES throughput.
+        Any 'per minute' claim must use total wall time, never mean step time.
+
+  6) SAMPLE EVIDENCE (pulled from the base_eval section of the same log):
+     <|bos|>The capital of France is the capital of France. The capital of France is the capital of France. Th
+     <|bos|>The chemical symbol of gold is the gold of the gold. The gold is the gold of the gold. The
+     <|bos|>If yesterday was Friday, then tomorrow will be the first time to get to the end of the day. If you
+     <|bos|>The opposite of hot is the same as hot is the same as hot is the same as hot is the
+     -> 4/7 conditioned samples contain a verbatim repeated phrase.
+     Unconditioned samples are locally fluent English with correct syntax and
+     punctuation, but no factual grounding and no coherence past a sentence.
+     That combination - local fluency, zero factual recall, degenerate loops under
+     greedy decoding - is the signature of a model that has learned the token
+     distribution but not yet the content. It corroborates UNDERFITTING and rules
+     out instability (a diverged model emits noise, not grammatical English).
+     LIMITATION: this log contains 1 sample snapshot, taken at the end by
+     base_eval. Sample EVOLUTION cannot be traced from this artifact. Re-run with
+     --sample-every=500 to capture the trajectory; that is a protocol fix, not an
+     analysis one, and it costs nothing extra to collect.
+
+============================================================================================
+D. VERDICT AND THE CHEAPEST FALSIFIER
+============================================================================================
+  Evidence for UNDERFITTING (accepted):
+    - tokens:scaling-params = 3.53 vs ~20 optimal -> 5.7x undertrained.
+    - val bpb still falling at the end: last 500 steps 1.1721 -> 1.1638 (+0.0083), never flat.
+    - epoch counter stayed at 1: the model never saw a token twice, so it cannot have
+      memorized the training set.
+  Evidence AGAINST overfitting: train-vs-val gap does not widen (part C4), and with
+    one epoch over 82M fresh tokens there is no repetition to overfit to.
+  Evidence AGAINST instability: no loss spike, no NaN, monotone val curve (True), lrm followed
+    the schedule exactly.
+  => DIAGNOSIS: UNDERFITTING / budget-limited. Not overfitting, not instability.
+
+  CHEAPEST FALSIFIER (~11 min, one run, already in the catalog):
+    w2-tokens-10000  = the identical config at 10,000 steps instead of 5,000.
+    Prediction if the underfitting diagnosis is right: val bpb keeps falling well past
+    1.1638, roughly along the power law fit by the 51 points already measured.
+    FALSIFIED if doubling the token budget buys < 0.02 bpb, or if val bpb turns UP while
+    train loss keeps falling - either outcome would mean the run is capacity- or
+    data-limited rather than budget-limited, and the right next move would be a bigger
+    model or better data rather than more steps.
+    Note this falsifier is cheaper AND more decisive than a seed replicate, because the
+    predicted effect (0.008+ bpb over the last 500 steps alone) is far larger
+    than any plausible seed noise.
+

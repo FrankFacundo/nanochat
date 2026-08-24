@@ -1,0 +1,148 @@
+========================================================================================
+1. ARTIFACT CLASSIFICATION (by file, with sizes and reconstructability)
+========================================================================================
+  manifest.json                                               1,555 bytes
+  metrics.jsonl                                              12,646 bytes
+  stdout.log                                                  8,776 bytes
+  summary.json                                                2,576 bytes
+  workspace/base_checkpoints/lab/meta_000030.json             1,372 bytes
+  workspace/base_checkpoints/lab/model_000030.pt        294,145,379 bytes
+  workspace/base_checkpoints/lab/optim_000030_rank0.pt  545,905,413 bytes
+  workspace/tokenizer/token_bytes.pt                        132,649 bytes
+  workspace/tokenizer/tokenizer.pkl                         412,126 bytes
+
+  IMMUTABLE PROVENANCE -> manifest.json. It is the only file written BEFORE the
+    run and never updated. It pins the facts nothing else can recover:
+      repo_commit    = 92d63d4e8bb4df75c3b71618f31ddde2378b2bcd
+      repo_dirty     = True
+      platform       = macOS-26.5.2-arm64-arm-64bit
+      python         = 3.10.20 (main, Mar 11 2026, 17:43:48) [Clang 20.1.8 ]
+      started_at     = 2026-08-22T19:20:46.956102+00:00
+      execution_id   = w0-smoke--20260822-212046
+      parent_run     = None
+      commands       = 1 command(s), argv captured verbatim
+
+  RAW RECORD -> metrics.jsonl. 123 append-only rows, 5 series, never rewritten.
+  DERIVED CONVENIENCE -> summary.json (aggregates) and stdout.log (human view).
+  DERIVED + HEAVY -> workspace/ (checkpoints, tokenizer copy). Reproducible from
+    manifest + data; the expensive thing to keep, the cheap thing to lose.
+
+========================================================================================
+2. PROOF that summary.json is DERIVED: recompute every aggregate from metrics.jsonl
+========================================================================================
+  series             field          summary.json       recomputed   match
+  lr_multiplier      count                    30               30      OK
+  lr_multiplier      first                  0.03             0.03      OK
+  lr_multiplier      last                   0.75             0.75      OK
+  lr_multiplier      last_step                29               29      OK
+  lr_multiplier      max                    0.75             0.75      OK
+  lr_multiplier      min                    0.03             0.03      OK
+  step_ms            count                    30               30      OK
+  step_ms            first               4549.48          4549.48      OK
+  step_ms            last                1317.46          1317.46      OK
+  step_ms            last_step                29               29      OK
+  step_ms            max                 4549.48          4549.48      OK
+  step_ms            min                 1248.35          1248.35      OK
+  tokens_per_second  count                    30               30      OK
+  tokens_per_second  first                3601.0           3601.0      OK
+  tokens_per_second  last                12436.0          12436.0      OK
+  tokens_per_second  last_step                29               29      OK
+  tokens_per_second  max                 13124.0          13124.0      OK
+  tokens_per_second  min                  3601.0           3601.0      OK
+  train_loss         count                    30               30      OK
+  train_loss         first              10.39753         10.39753      OK
+  train_loss         last               8.383237         8.383237      OK
+  train_loss         last_step                29               29      OK
+  train_loss         max                10.39753         10.39753      OK
+  train_loss         min                8.383237         8.383237      OK
+  val_bpb            count                     3                3      OK
+  val_bpb            first               3.20159          3.20159      OK
+  val_bpb            last               2.336091         2.336091      OK
+  val_bpb            last_step                30               30      OK
+  val_bpb            max                 3.20159          3.20159      OK
+  val_bpb            min                2.336091         2.336091      OK
+
+  mismatches = 0  ->  summary.json carries ZERO information not already in
+  metrics.jsonl. Delete it and you lose nothing; delete metrics.jsonl and the
+  aggregates become unfalsifiable numbers with no series behind them.
+
+========================================================================================
+3. WHAT RETAINING ONLY FINAL VALIDATION BPB DESTROYS
+========================================================================================
+  Kept:  final val_bpb = 2.336091
+  Lost, and each loss disables a specific question:
+    a) the val_bpb TRAJECTORY ['0:3.2016', '15:2.9941', '30:2.3361']
+       -> without it you cannot tell 'converged' from 'still descending'. Here the
+          last interval still drops 0.6580 bpb, so the run is
+          budget-limited, not capability-limited. That single fact decides whether
+          a negative ablation result means 'no effect' or 'not trained long enough'.
+    b) THROUGHPUT DRIFT: step_ms 4549 -> 1317 (max 4549, min 1248).
+       -> any wall-time claim computed from mean step_ms is wrong by up to 3.6x if you did not see this shape.
+    c) TRAIN vs VAL SEPARATION: train_loss 10.3975 -> 8.3832 alongside
+       val_bpb. Overfitting is a statement about the GAP over time; a single final
+       number cannot express a gap.
+    d) the number of eval points (3), which is the multiple-comparison count
+       needed to interpret a reported minimum (section 4c).
+
+========================================================================================
+4. THREE INVALID COMPARISONS, each quantified against this repo
+========================================================================================
+  (a) MEASUREMENT failure - unequal evaluation budgets.
+      eval_tokens across base experiments in the catalog: [32768, 131072, 524288]
+      w0-smoke used 32,768; the pilot default is 131,072; confirm runs use 524,288.
+      A 32,768-token estimate averages 16x fewer targets than a confirm
+      estimate, so its standard error is ~4.0x larger. Comparing a
+      pilot bpb against a confirm bpb compares two different measuring instruments.
+      RULE: bpb is comparable only between runs with identical eval_tokens AND the
+      same val shards (W1 showed the byte denominator also moves with the tokenizer).
+
+  (b) CONTROL failure - the workspace carries its own tokenizer.
+      run workspace tokenizer sha256[:16] = ae73c5f7a960edc5
+      shared  ~/.cache tokenizer sha256[:16] = ae73c5f7a960edc5
+      identical = True
+      Every run snapshots its tokenizer, so a later `tok_train` cannot retro-corrupt
+      it - but it also means two runs can silently disagree. Comparing bpb across
+      runs whose tokenizer hashes differ is invalid even at equal eval_tokens.
+
+  (c) SELECTION failure - reporting the minimum over many eval points.
+      The real d6 base_train run logged 51 validation points; it reports
+      'Minimum validation bpb' (base_train.py:659). min=1.163812 final=1.163812 gap=+0.000000
+      This particular curve is monotone decreasing (True), so min==final and the bias
+      is ZERO HERE. That is a property of a 5000-step run with a 524,288-token eval,
+      not of the estimator. At pilot scale (600 steps, eval_tokens=131,072) the eval
+      noise is ~2x larger and the curve is not monotone, which is exactly where
+      min-over-N starts paying out. Do not generalize this zero.
+      min-over-N is a biased-low estimator: with N=51 draws its expected value
+      sits below the true endpoint by roughly the noise scale. Two arms with a
+      DIFFERENT number of eval points are therefore not comparable on min at all.
+      RULE: pre-register final-step bpb as the primary endpoint; report min only as
+      a secondary, and only between arms with identical eval_every and horizon.
+
+========================================================================================
+5. FROZEN PROTOCOL: divergence rule and test-set policy
+========================================================================================
+  Reproducibility hole found in this very run: repo_dirty = True.
+    manifest pins repo_commit=92d63d4e8bb4 but the tree had uncommitted
+    edits, so the commit does NOT identify the code that ran. FIX: refuse to launch
+    when dirty, or store `git diff` in the run dir. Rule below assumes that fix.
+
+  DIVERGENCE RULE (measurable, not vibes):
+    1. Establish the noise floor first: run the control 3x, same commit, same args,
+       same data order, varying only the seed. Let s = stdev of final val_bpb.
+    2. A reproduction PASSES if |bpb_repro - bpb_original| <= 2s.
+    3. A claimed effect counts only if |bpb_arm - bpb_control| > 3s AND the sign is
+       stable across all seeds run.
+    4. Any run whose manifest shows repo_dirty=true, a different tokenizer hash, or a
+       different eval_tokens is quarantined and cannot enter a comparison.
+    NOTE: s is currently UNMEASURED in this workspace. Until it is, no effect in this
+    lab is calibrated - that is the single highest-value 3 x 6min of compute available.
+
+  TEST-SET POLICY:
+    - train shards: fitting only.
+    - val shards (the ones base_train evaluates): model selection, ablation ranking,
+      early stopping. Touched constantly, therefore burned for final claims.
+    - sealed test: a disjoint shard range, hashed and committed BEFORE the search
+      starts, evaluated ONCE at the very end by the frozen entrypoint. One number,
+      reported whatever it says. If it is opened twice it is no longer a test set and
+      must be relabelled as a second validation split.
+

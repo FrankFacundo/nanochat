@@ -14,7 +14,7 @@ import requests
 import pyarrow.parquet as pq
 from multiprocessing import Pool
 
-from nanochat.common import get_base_dir
+from nanochat.common import get_base_dir, print0
 
 # -----------------------------------------------------------------------------
 # The specifics of the current pretraining dataset
@@ -61,6 +61,16 @@ def list_parquet_files(data_dir=None, warn_on_legacy=False):
         f for f in os.listdir(data_dir)
         if f.endswith('.parquet') and not f.endswith('.tmp')
     ])
+    # Sealed-test support: shards named in NANOCHAT_SEALED_SHARDS (comma-separated basenames)
+    # are removed from BOTH the train and val views, so a held-out split cannot be trained on
+    # or model-selected against by accident. Unset by default => historical behaviour exactly.
+    sealed = os.environ.get("NANOCHAT_SEALED_SHARDS", "").strip()
+    if sealed:
+        blocked = {name.strip() for name in sealed.split(",") if name.strip()}
+        kept = [f for f in parquet_files if f not in blocked]
+        if len(kept) != len(parquet_files):
+            print0(f"Sealed test: excluding {len(parquet_files) - len(kept)} shard(s) from train/val: {sorted(blocked)}")
+        parquet_files = kept
     parquet_paths = [os.path.join(data_dir, f) for f in parquet_files]
     return parquet_paths
 

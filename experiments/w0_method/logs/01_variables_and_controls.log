@@ -1,0 +1,79 @@
+========================================================================================
+1. INDEPENDENT vs DEPENDENT VARIABLE, read off the LR ablation in the catalog
+========================================================================================
+  control = w1-pilot, arms = w2-lr-half / w2-lr-double
+  INDEPENDENT VARIABLE (the only keys that differ): ['embedding_lr', 'matrix_lr', 'scalar_lr', 'unembedding_lr']
+     embedding_lr       half=0.15     control=(default) double=0.6
+     matrix_lr          half=0.01     control=(default) double=0.04
+     scalar_lr          half=0.25     control=(default) double=1.0
+     unembedding_lr     half=0.004    control=(default) double=0.016
+
+  DEPENDENT VARIABLE: val bpb (scripts/base_train.py logs 'Validation bpb' and
+     wandb key val/bpb). Chosen over train_loss because it is tokenizer-invariant
+     and measured on held-out bytes.
+
+  HELD FIXED, 13 controls, all verified identical across the three commands:
+     aspect_ratio=64  core_metric_every=-1  depth=6  device_batch_size=32
+     eval_every=100  eval_tokens=131072  head_dim=64  max_seq_len=512
+     num_iterations=600  sample_every=-1  save_every=-1  total_batch_size=16384
+     window_pattern=L
+
+  Note all FOUR parameter-group LRs move together (embedding/unembedding/matrix/scalar).
+  That is one intervention 'global LR multiplier', not four - nanochat keeps separate
+  LRs per group (nanochat/gpt.py setup_optimizer), so moving only one would be a
+  different experiment.
+
+========================================================================================
+2. HIDDEN JOINT INTERVENTIONS: what base_train.py silently changes for you
+========================================================================================
+  d6 scaling params (blocks+lm_head) = 23,199,960   target_tokens = 278,399,520
+  d12 reference D_REF = 1,321,216,128   B_REF = 524,288
+
+  base_train.py:299  batch_lr_scale = sqrt(total_batch_size / B_REF)
+  base_train.py:308  weight_decay    = wd * sqrt(B/B_REF) * (D_REF/target_tokens)
+
+   total_batch_size  LR multiplier  embedding_lr   matrix_lr   wd(0.28 nominal)
+              8,192         0.1250      0.025000    0.002500           0.166101
+             16,384         0.1768      0.035355    0.003536           0.234903
+             32,768         0.2500      0.050000    0.005000           0.332203
+
+  => w2-batch-8192 vs w2-batch-32768 is NOT a batch-size ablation. It is a joint
+     (batch, LR, weight-decay) intervention: the LR multiplier moves 0.1250 -> 0.2500, i.e. 2.00x.
+     To isolate batch size you must pin the LRs explicitly on both arms.
+
+========================================================================================
+3. THE FOUR BUDGET AXES ARE NOT INTERCHANGEABLE (real numbers, d6 family)
+========================================================================================
+  All arms run 600 steps x 16,384 tokens = 9,830,400 tokens (fixed steps AND fixed tokens).
+
+                        arm  n_embd  heads   seq       params    FLOPs/tok  total FLOPs  vs control
+         w1-pilot (control)     384      6   512   73,531,646  153,355,680    1.508e+15       1.00x
+      w2-depth8-fixed-width     384      6   512   89,653,578  179,308,368    1.763e+15       1.17x
+    w2-width512-fixed-depth     512      8   512  102,760,774  232,785,744    2.288e+15       1.52x
+                 w2-heads-4     384      4   512   73,531,574  153,355,248    1.508e+15       1.00x
+                 w2-heads-3     384      3   512   73,531,538  153,355,032    1.508e+15       1.00x
+             w2-context-256     384      6   256   73,531,646  146,277,792    1.438e+15       0.95x
+            w2-context-1024     384      6  1024   73,531,646  167,511,456    1.647e+15       1.09x
+
+  Fixed steps and fixed tokens are IDENTICAL here (batch is pinned), yet compute
+  spans a wide range. A fixed-step depth/width/head/context result is therefore
+  never automatically compute-matched - the FLOPs column is the confound.
+
+  When to use which axis:
+    fixed STEPS     - optimizer dynamics at identical update count (LR, warmup, schedule).
+    fixed TOKENS    - data efficiency, only when bytes/token is also equal (see W1).
+    fixed FLOPs     - any architecture-efficiency claim; use --target-flops.
+    fixed WALL TIME - practical value on this machine; the only axis that prices
+                      MPS kernel coverage, memory pressure and throughput drift.
+
+========================================================================================
+4. NUISANCE vs CONFOUND, instantiated on this hardware
+========================================================================================
+  NUISANCE (adds variance, uncorrelated with the intervention):
+    step_ms in the real w0-smoke run: first=4549ms max=4549ms min=1248ms last=1317ms
+    -> 3.64x spread from MPS warmup/thermal, not from any treatment.
+    It inflates the error bar on a wall-time claim; it does not bias it.
+  CONFOUND (moves WITH the intervention, offers a rival explanation):
+    raising total_batch_size also raises every LR by sqrt(B/B_ref) (section 2).
+    If 32K batch wins, 'bigger batch helps' and 'higher LR helps' fit the data equally.
+    Fix by pinning LRs; you cannot fix it by averaging more seeds.

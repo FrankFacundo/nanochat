@@ -1,0 +1,121 @@
+============================================================================================
+1. BASELINE-PRESERVING DEFAULT - proven, not asserted
+============================================================================================
+  GPTConfig.tie_embeddings default = False
+  base_train.py --tie-embeddings default = 0
+
+  The 30-step smoke run at --tie-embeddings=0 reproduces the PRE-EXISTING w0-smoke run
+  that was recorded on 2026-08-22, before this feature existed:
+    w0-smoke (before the change): first=3.20159 last=2.336091
+    untied rerun (after):         first=3.201590 last=2.336091   [logs/02_tie_smoke.log]
+    identical to 6 decimals -> the untied code path is untouched.
+  The repo test suite also passes unchanged (43 passed; the single failure,
+  tests/test_execution.py::test_memory_limit, reproduces on a clean checkout and is a
+  macOS RLIMIT issue unrelated to this contract).
+
+============================================================================================
+2. WHAT THE INTERVENTION ACTUALLY CHANGES (measured on the real d6 config)
+============================================================================================
+  quantity                             untied           tied          delta
+  total parameters                 73,531,646     60,948,734    -12,582,912
+  distinct tensors                         49             48             -1
+  matmul params (FLOP-bearing)     23,199,984     23,199,984             +0
+  FLOPs / token                   153,355,680    153,355,680             +0
+
+  Saved exactly one vocab tensor: 12,582,912 = wte size 12,582,912. That is 17.1% of the model.
+  FLOPs/token are UNCHANGED. This is the accounting point that matters: tying removes
+  STORAGE, not arithmetic - the logit matmul is still (n_embd x padded_vocab). Any claim
+  of 'cheaper' must say cheaper in what: memory yes, compute no.
+  Confirmed by the smoke run: total 73,531,646 -> 60,948,734, FLOPs/token 1.533557e+08 in BOTH.
+
+============================================================================================
+3. OPTIMIZER COVERAGE
+============================================================================================
+Scaling the LR for the AdamW parameters ∝1/√(64/768) = 3.464102
+  distinct params in model        : 20
+  params registered in optimizer  : 20 (unique: 20)
+  shared tensor registered        : 1x  <- must be 1
+  It is kept in the UNEMBEDDING group (lr=unembedding_lr, betas=(0.8,0.96), wd=0.01) and
+  dropped from the embedding group. Rationale: the embedding path is followed by norm()
+  and is scale-invariant; the logit path is not. Registering it twice would apply two
+  AdamW updates and two decays per step - a silent 2x LR on 17% of the model.
+  setup_optimizer now asserts both total coverage AND uniqueness (gpt.py), so this
+  class of bug fails loudly at construction instead of quietly during training.
+
+============================================================================================
+4. CHECKPOINT METADATA
+============================================================================================
+  base_train saves asdict(model.config) into meta_*.json, so the flag rides along:
+    {"sequence_len": 512, "vocab_size": 32768, "n_layer": 6, "n_head": 6, "n_kv_head": 6, "n_embd": 384, "window_pattern": "L", "tie_embeddings": true}
+  Old checkpoints have no 'tie_embeddings' key. GPTConfig gives it default False, and
+  checkpoint_manager._patch_missing_config_keys already handles absent keys, so every
+  pre-existing d6/d4 checkpoint still loads UNTIED. Test 7 pins that.
+  build_model() calls model.tie_weights() after load_state_dict(assign=True) - without
+  it a tied checkpoint would silently reload untied (test 10).
+
+============================================================================================
+5. THE BUG THE TESTS CAUGHT (and why the first 8 tests were not enough)
+============================================================================================
+  Version 1 tied only inside __init__. All 8 original unit tests passed - they build on
+  CPU. But base_train builds on the META device and calls to_empty(), which REBUILDS every
+  parameter's storage and silently breaks the alias. The first smoke run reported:
+      --tie-embeddings=1  ->  total: 73,531,646   (identical to untied)
+  i.e. the run trained UNTIED while its checkpoint metadata claimed tie_embeddings=True.
+  Had this shipped, every 'tied vs untied' number in the portfolio would have been a
+  comparison of a model against itself, and nothing in the training log would have said so.
+
+  Fix: GPT.tie_weights(), idempotent, re-invoked from init_weights() (after to_empty) and
+  from checkpoint_manager.build_model() (after assign-load). Tests 9 and 10 pin both paths.
+  LESSON FOR EVERY OTHER CONTRACT IN THE MATRIX: a unit test that does not go through
+  meta-device -> to_empty -> init_weights -> save -> load is not testing nanochat.
+
+============================================================================================
+6. RAW vs PARAMETER-MATCHED COMPARISON (tying changes capacity, so both are required)
+============================================================================================
+  RAW comparison (what the flag does): d6 untied 73,531,646 params
+                                    vs d6 tied   60,948,734 params
+    This answers 'is tying a good deal at fixed architecture?' and it is BIASED AGAINST
+    tying, which is handed 17% fewer parameters at identical FLOPs.
+
+  PARAMETER-MATCHED comparison: give the tied arm back the 12,582,912 params.
+  Sweep to find the tied config closest to the untied 73,531,646:
+                    config  total params  vs untied d6    FLOPs/tok  vs untied
+       d6 untied (control)    73,531,646        1.000x  153,355,680     1.000x
+                   d6 tied    60,948,734        0.829x  153,355,680     1.000x
+         d6 tied aspect=72    73,171,234        0.995x  191,301,240     1.247x
+         d6 tied aspect=80    85,983,558        1.169x  232,785,744     1.518x
+         d6 tied aspect=85    85,983,558        1.169x  232,785,744     1.518x
+         d6 tied aspect=90    99,385,706        1.352x  277,809,192     1.812x
+         d6 tied aspect=96    99,385,706        1.352x  277,809,192     1.812x
+         d7 tied aspect=64    90,259,832        1.227x  208,504,944     1.360x
+         d8 tied aspect=64   109,052,330        1.483x  276,826,512     1.805x
+         d9 tied aspect=64   149,078,600        2.027x  360,090,936     2.348x
+
+  Closest parameter match: d6 tied aspect=72 at 73,171,234 params (0.995x) but
+  1.247x the FLOPs/token - so parameter-matching UNMATCHES compute.
+  There is no configuration that matches both, because tying changes the params-per-FLOP
+  ratio by construction. State which one you matched, and report the other as a covariate.
+
+============================================================================================
+7. THE RUNS TO EXECUTE (pre-registered before looking at any result)
+============================================================================================
+  HYPOTHESIS: at d6/600 steps the model is 5.7x undertrained (W1/05) and 85.6% of its
+  parameters are vocab tensors (W1/03), so removing 17% of parameters at zero FLOP saving
+  should HURT val bpb. Tying is predicted to be a bad trade at this scale, and a better one
+  as depth grows (the vocab share falls to 81.6% at width 512 already).
+  FALSIFIER: tied >= untied on val bpb at matched FLOPs, by more than 3 seed-sigma.
+
+  # arm A - raw, fixed FLOPs (identical config, only the flag moves)
+  python -m scripts.base_train --depth=6 --head-dim=64 --window-pattern=L --max-seq-len=512 \
+    --device-batch-size=32 --total-batch-size=16384 --num-iterations=600 --eval-every=100 \
+    --eval-tokens=131072 --core-metric-every=-1 --tie-embeddings=0 --model-tag=w2_untied
+  #   ... and the same line with --tie-embeddings=1 --model-tag=w2_tied
+
+  # arm B - parameter-matched (tied arm widened back to ~73,531,646 params)
+  python -m scripts.base_train --depth=6 --aspect-ratio=72 --head-dim=64 --window-pattern=L \
+    --max-seq-len=512 --device-batch-size=32 --total-batch-size=16384 \
+    --target-flops=1.508e+15 --num-iterations=-1 --eval-every=100 \
+    --eval-tokens=131072 --core-metric-every=-1 --tie-embeddings=1 --model-tag=w2_tied_pmatched
+
+  Report BOTH arms. Reporting only arm A overstates the cost of tying; reporting only arm B
+  hides that the extra width had to come from somewhere.

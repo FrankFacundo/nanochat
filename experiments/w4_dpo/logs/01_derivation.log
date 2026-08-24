@@ -1,0 +1,147 @@
+================================================================================================
+1. THE DERIVATION
+================================================================================================
+  Start from the RLHF objective: maximise E[r(x,y)] - beta * KL( pi_theta || pi_ref ).
+  Its exact solution is the Gibbs distribution
+        pi*(y|x) = (1/Z(x)) * pi_ref(y|x) * exp( r(x,y) / beta )
+  Take logs and solve for the reward:
+        r(x,y) = beta * log( pi*(y|x) / pi_ref(y|x) ) + beta * log Z(x)
+  DPO's move: treat the POLICY as the reward model, i.e. define the implicit reward
+        r_theta(x,y) = beta * ( log pi_theta(y|x) - log pi_ref(y|x) )                    (*)
+  Now fit r_theta to preferences with the Bradley-Terry likelihood
+        P(y_w > y_l | x) = sigmoid( r(x,y_w) - r(x,y_l) )
+  The intractable partition term beta*log Z(x) is IDENTICAL for y_w and y_l (it depends
+  only on x), so it CANCELS in the difference. That cancellation is the whole trick - it
+  is why DPO needs no reward model, no sampling, and no RL loop. Substituting (*):
+
+        L_DPO = - log sigmoid( beta * [ (log pi_th(y_w|x) - log pi_ref(y_w|x))
+                                      - (log pi_th(y_l|x) - log pi_ref(y_l|x)) ] )
+
+  and log pi(y|x) = SUM_t log p(y_t | x, y_<t) by the chain rule. A sum, never a mean:
+  averaging would divide by |y|, which is not part of any probability and would make the
+  loss depend on an arbitrary normalization choice.
+
+================================================================================================
+2. THE GRADIENT, AND WHY THE REFERENCE IS FROZEN
+================================================================================================
+  d/d_theta L = - beta * sigmoid( -beta * margin ) * [ grad log pi_th(y_w) - grad log pi_th(y_l) ]
+
+  Read it as: push UP the chosen response, push DOWN the rejected one, with a per-pair
+  weight sigmoid(-beta*margin) that is LARGE exactly when the model currently has the pair
+  ranked wrong. It is a self-weighting hard-example miner.
+
+  pi_ref appears only inside `margin`, as a constant offset. If it were trainable, the pair
+  could be satisfied by DRAGGING THE REFERENCE DOWN instead of improving the policy, and the
+  KL anchor - the only thing preventing the policy from collapsing onto a degenerate
+  high-reward mode - would disappear. nanochat/dpo.py asserts requires_grad is False on both
+  reference tensors so this cannot happen by accident.
+
+  numeric check of the gradient formula (beta=0.1, margin=1.5):
+    hand   dL/d log_pi(chosen)   = -beta*sigmoid(-beta*margin) = -0.046257015466
+    torch  pc.grad               = -0.046257015466   match=True
+    hand   dL/d log_pi(rejected) = +0.046257015466
+    torch  pr.grad               = +0.046257015466   match=True
+
+================================================================================================
+3. WORKED EXAMPLE, COMPUTED BY HAND THEN VERIFIED
+================================================================================================
+  Prompt x = "<|user_start|>What is 2+2?<|user_end|><|assistant_start|>"
+  chosen   y_w = "4"          rejected y_l = "I think it might be 5, but I am not sure."
+  Suppose the token log-probs on the RESPONSE positions only (prompt masked out) are:
+
+    chosen y_w               log p      rejected y_l             log p
+    4                        -0.30      I                        -1.10
+    <|assistant_end|>        -0.20       think                   -0.90
+                                         it                      -0.80
+                                         might                   -1.20
+                                         be                      -0.60
+                                         5                       -2.00
+                                        ,                        -0.70
+                                        ...                      -1.50
+                                        <|assistant_end|>        -0.40
+
+    log pi_theta(y_w|x) = sum = -0.50   (2 tokens)
+    log pi_theta(y_l|x) = sum = -9.20   (9 tokens)
+    reference (frozen SFT model): log pi_ref(y_w|x) = -0.60, log pi_ref(y_l|x) = -8.00
+
+  BY HAND:
+    policy log-ratio    = -0.50 - (-9.20) = +8.70
+    reference log-ratio = -0.60 - (-8.00) = +7.40
+    margin              = +8.70 - (+7.40) = +1.30
+    z = beta * margin   = 0.1 * +1.30 = +0.130
+    sigmoid(z)          = 0.532454306
+    L = -log sigmoid(z) = 0.630258195
+    implicit rewards: r(y_w) = beta*(-0.50 - -0.60) = +0.010
+                      r(y_l) = beta*(-9.20 - -8.00) = -0.120
+
+  FROM nanochat/dpo.py:
+    loss            = 0.630258195   |diff| = 1.11e-16
+    chosen_reward   = +0.010
+    rejected_reward = -0.120
+    reward_margin   = +0.130
+    pref_accuracy   = 1.0
+
+================================================================================================
+4. WHAT MASKING MUST EXCLUDE, AND WHY EACH ONE MATTERS
+================================================================================================
+  Only the ASSISTANT RESPONSE tokens enter log pi(y|x). Excluded:
+    prompt tokens   - they are the conditioning x. They are IDENTICAL in the chosen and
+                      rejected branches, so including them adds the same constant to both
+                      log-probs. In the margin it cancels... but ONLY if both branches
+                      were padded identically. Include the prompt and the loss silently
+                      becomes padding-dependent. Exclude it and the question never arises.
+    padding         - contributes log p of a pad token, pure noise scaled by how much
+                      padding a batch happened to need.
+    tool output     - generated by the interpreter at test time, not by the model (W3/01).
+    <|assistant_end|> - INCLUDED. Deciding to stop is part of the response being preferred.
+  nanochat/dpo.py takes response_mask explicitly rather than deriving it, so the caller
+  cannot accidentally inherit the pretraining convention where every token is a target.
+  Verified by test_masking_ignores_prompt_and_padding: two sequences with the same
+  response tokens but different prompts and different padding give byte-identical
+  response log-probs.
+
+================================================================================================
+5. THE BETA LIMITS, NUMERICALLY
+================================================================================================
+  Fixed pair with margin = +1.30 (policy already prefers the chosen response).
+        beta   z=beta*margin   sigmoid(z)         loss   |dL/dlogpi_w|
+       1e-06          0.0000     0.500000     0.693147           5e-07
+        0.01          0.0130     0.503250     0.686668       0.0049675
+        0.05          0.0650     0.516244     0.661175       0.0241878
+         0.1          0.1300     0.532454     0.630258       0.0467546
+         0.5          0.6500     0.657010     0.420055        0.171495
+         1.0          1.3000     0.785835     0.241008        0.214165
+        10.0         13.0000     0.999998     0.000002     2.26032e-05
+
+  beta -> 0   : z -> 0, loss -> log 2 = 0.693147 for EVERY pair, and the gradient
+                magnitude beta*sigmoid(-z) -> 0. The KL penalty dominates completely: the
+                policy is pinned to the reference and learns nothing. DPO degenerates to a
+                constant.
+  beta large  : sigmoid saturates. Correctly-ranked pairs contribute ~0 loss and ~0 gradient;
+                wrongly-ranked pairs contribute a loss that grows LINEARLY in beta
+                (-log sigmoid(z) -> -z for z << 0). Training is then driven almost entirely
+                by the mislabeled and ambiguous tail of the dataset - which is exactly the
+                subset most likely to be noise. High beta does not mean 'trust preferences
+                more', it means 'trust your worst labels more'.
+  In between  : beta is the KL leash length. Report it with every DPO number; a DPO result
+                without its beta is uninterpretable.
+
+================================================================================================
+6. LENGTH BIAS - the failure mode built into the objective
+================================================================================================
+  log pi(y|x) is a SUM over tokens, and every token log-prob is negative. So longer
+  responses have systematically MORE NEGATIVE log-probs, purely by length:
+    chosen  : 2 tokens -> -0.50   (-0.250 per token)
+    rejected: 9 tokens -> -9.20   (-1.022 per token)
+  Per token the rejected response is actually only +0.772 nats worse, but in
+  SUM it is -8.70 nats worse - 11.3x amplified by the length difference alone.
+
+  If chosen responses in the dataset are systematically SHORTER (or longer) than rejected
+  ones, the fastest way to lower the loss is to shift the model's length distribution -
+  a change that raises preference accuracy while teaching nothing about quality.
+  The reference log-ratio absorbs part of this (pi_ref pays the same length cost), which
+  is exactly why the pi_ref term is not optional bookkeeping. It does NOT absorb all of it,
+  because the policy can still change lengths relative to the reference.
+  MEASURE IT: report mean token counts for chosen and rejected, and correlate the
+  per-pair margin with the length difference. If |correlation| is large, the preference
+  signal and the length signal are not separable in that dataset.

@@ -1,0 +1,103 @@
+====================================================================================================
+1. THE NOISE FLOOR - measured first, before any arm was interpreted
+====================================================================================================
+  3 runs of the pilot control, identical config, only NANOCHAT_SEED differs (42/43/44).
+  final val_bpb : ['1.526232', '1.523440', '1.530679']
+  mean = 1.526784   sigma = 0.003651   range = 0.007239
+  wall time     : ['5.49m', '5.18m', '6.01m']  -> 1.16x spread
+
+  DECISION RULE (frozen before looking at the arms): an effect counts as REAL only if
+  |delta| > 3 sigma = 0.010953 bpb. Between 2 and 3 sigma it is SUGGESTIVE.
+  Below 2 sigma (0.007302) it is a NULL result and must be reported as one.
+
+  CAVEAT, stated up front: nanochat seeds only torch's global RNG (common.py), which
+  controls weight INIT. The data order is identical across these three runs. So sigma
+  here is an init+hardware noise floor and UNDERSTATES true run-to-run variation.
+  Every effect size below is therefore an OPTIMISTIC significance estimate.
+
+====================================================================================================
+2. THE PORTFOLIO
+====================================================================================================
+  arm         intervention               val_bpb     delta   sigma    wall      verdict
+  lr-half     all 4 group LRs x0.5      1.612853 +0.086069   +23.6   5.40m   REAL worse
+  lr-double   all 4 group LRs x2.0      1.451009 -0.075775   -20.8   5.67m  REAL better
+  wd-zero     --weight-decay 0.28->0    1.530254 +0.003470    +1.0   5.14m         NULL
+  tied        --tie-embeddings 0->1     1.559273 +0.032489    +8.9   5.00m   REAL worse
+  control     (3 seeds)                 1.526784 +0.000000    +0.0   5.56m     baseline
+
+====================================================================================================
+3. THREE DEFENDED CLAIMS
+====================================================================================================
+
+  --- POSITIVE (and SURPRISING): doubling every LR helps, a lot ---
+  effect size   : -0.075775 bpb vs control = 21 sigma. Also better than lr-half by 0.161844 bpb, so the response is monotone across 0.5x/1x/2x.
+  resource cost : 5.67m, identical params and FLOPs/token to the control - this is a free win at fixed compute.
+  confound      : the 600-step horizon. nanochat's default LRs are tuned at d12 with a 524,288-token batch and transferred by muP-style rules; at d6/16,384 tokens/600 steps the transferred value may simply be too conservative. 'Higher LR is better' and 'the muP transfer is mistuned for this budget' predict the same result here.
+  strength      : STRONG at this budget, UNKNOWN beyond it. Undertrained runs systematically favour aggressive LRs because they never reach the regime where instability bites.
+  cheapest decisive follow-up: run lr-double at 3000+ steps (w2-tokens-10000 style). If the advantage shrinks or reverses, the effect was a short-horizon artifact - which is the single most common way LR ablations mislead.
+
+  --- NEGATIVE: halving every LR is clearly harmful ---
+  effect size   : +0.086069 bpb = 24 sigma WORSE.
+  resource cost : 5.40m, same compute.
+  confound      : same as above, with the sign reversed; a lower LR at a fixed short horizon simply travels less far along the same trajectory.
+  strength      : STRONG, and it is the more trustworthy half of the LR result: it is hard to construct a story where a 24-sigma degradation is an artifact.
+  cheapest decisive follow-up: none needed for the negative direction; it is already decisive at this budget.
+
+  --- NULL: turning weight decay off changes nothing measurable ---
+  effect size   : +0.003470 bpb = 0.95 sigma - inside the noise floor.
+  resource cost : 5.14m.
+  confound      : W2/01 proved --weight-decay reaches only 14.4% of parameters (the Muon matrix groups); the other 85.6% keep hardcoded AdamW decays the flag cannot touch. AND base_train anneals lambda to 0 on a cosine, so the arms differ only early. So this null is NOT 'weight decay does not matter' - it is 'this flag, on this fraction, over this horizon, does not matter'.
+  strength      : NULL, reported as a null. At 3.53 tokens-per-param (W1/05) the model is 5.7x undertrained and has nothing to overfit, which is exactly when regularization should do nothing. The null CONFIRMS the underfitting diagnosis.
+  cheapest decisive follow-up: the informative version is not a longer run, it is a different intervention: apply decay to the embedding/lm_head groups too, where 85.6% of the parameters live.
+
+  --- CAPACITY: tied embeddings ---
+  effect size   : +0.032489 bpb = +8.9 sigma.
+  resource cost : 5.00m; removes 12,582,912 params (17.1%) at IDENTICAL FLOPs/token (W2/03).
+  confound      : raw comparison only - the tied arm is handed 17% fewer parameters for the same compute, so this is biased against tying by construction.
+  strength      : REAL but RAW. It answers 'is the flag a good deal as-is', not 'is weight tying a good idea', which needs the parameter-matched arm.
+  cheapest decisive follow-up: the parameter-matched arm from W2/03: d6 tied at aspect_ratio=72 (73.2M params, 0.995x the control) run at matched FLOPs.
+
+====================================================================================================
+4. WHY CONFIRMING ONLY THE PILOT WINNER IS BIASED (Monte Carlo on the MEASURED sigma)
+====================================================================================================
+  Simulate a portfolio of 8 arms that are ALL genuinely identical to the control
+  (true effect exactly 0), each measured once with the measured sigma = 0.003651.
+  Then 'confirm' only the arm that looked best in the pilot.
+
+  mean apparent effect of the pilot WINNER : -0.005166 bpb  (-1.41 sigma)
+  mean effect on independent re-measurement: +0.000026 bpb  (+0.01 sigma)
+  expected SHRINKAGE                       : -0.005192 bpb
+  fraction of these all-null portfolios where the winner clears 2 sigma: 16.4%
+
+  With 8 arms and zero real effects, the best-looking arm appears 1.4 sigma better
+  purely by selection. Confirming ONLY that arm guarantees a regression to the mean that
+  reads as 'the effect got smaller at scale' - a story that is indistinguishable from a real
+  but budget-sensitive effect. That is the bias: the confirmation stage inherits the
+  selection, so it cannot correct it.
+  WHAT TO DO INSTEAD: confirm a PRE-REGISTERED set that includes at least one arm you expect
+  to be null (here, wd-zero) and one you expect to be negative (lr-half). If the null and
+  the negative reproduce with the right signs and magnitudes, the confirmation stage is
+  itself calibrated, and the positive result inherits that credibility.
+  NOTE the measured effects here are 9-24 sigma, far outside the
+  selection band - 1.4 sigma - so THESE particular claims are not winner's-curse artifacts.
+
+====================================================================================================
+5. THE CONFIRMATION RUN (control + intervention at a larger budget)
+====================================================================================================
+  Pre-registered before running: at 3000 steps (5x the pilot budget, ~28 min each),
+    H1: lr-double still beats the control by > 3 sigma  -> the effect is budget-robust
+    H0: the gap shrinks below 3 sigma or reverses       -> it was a short-horizon artifact
+  Both arms run as a PAIR at the same budget, on the same machine, back to back:
+
+    export NANOCHAT_SEED=42
+    COMMON="--depth=6 --aspect-ratio=64 --head-dim=64 --window-pattern=L --max-seq-len=512 \
+      --device-batch-size=32 --total-batch-size=16384 --num-iterations=3000 \
+      --eval-every=250 --eval-tokens=131072 --core-metric-every=-1 --sample-every=-1 --save-every=-1"
+    python -m scripts.base_train $COMMON --model-tag=confirm_control --run=dummy
+    python -m scripts.base_train $COMMON --embedding-lr=0.6 --unembedding-lr=0.016 \
+      --matrix-lr=0.04 --scalar-lr=1.0 --model-tag=confirm_lrdouble --run=dummy
+
+  The control is re-run at the new budget rather than reused from the pilot, because a
+  control measured at a different horizon is a different measuring instrument (W0/02 a).
+
+  Portfolio JSON written for downstream use.

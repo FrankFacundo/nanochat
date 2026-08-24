@@ -1,0 +1,15 @@
+================================================================================================
+FREEZING THE CAPSTONE PROTOCOL
+================================================================================================
+  wrote /Users/frankfacundo/Code/nanochat/experiments/w6_capstone/protocol.json
+
+  objective        : validation bits-per-byte (val_bpb) at the final step, 30 minutes wall clock of scripts.base_train on the machine below
+  device           : mps on macOS-26.5.2-arm64-arm-64bit
+  shards           : 171 total | val=shard_06542.parquet | SEALED=['shard_00168.parquet', 'shard_00169.parquet']
+  tokenizer sha256 : ae73c5f7a960edc56022dfd46a653df2...
+  code commit      : 463421072a03 (dirty=True)
+  noise floor      : sigma = 0.003651 bpb over 3 seeds [1.526232, 1.52344, 1.530679]
+  decision rule    : a candidate must beat a baseline by > 0.010953 bpb (3 sigma)
+
+  Enforce the seal in every search run:
+    export NANOCHAT_SEALED_SHARDS='shard_00168.parquet,shard_00169.parquet'

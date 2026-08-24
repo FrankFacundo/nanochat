@@ -1,0 +1,66 @@
+==============================================================================
+1. WHY THE 600-STEP TOKEN-MATCHED PILOT IS CONFOUNDED
+==============================================================================
+   Both arms: d6, 16,384 tok/step, 600 steps = 9,830,400 tokens each.
+
+     vocab  bytes/tok     bytes seen    FLOPs/tok   total FLOPs       params
+      8192      3.993     39,251,327   96,732,576     9.509e+14   26,345,726
+     32768      4.683     46,036,087  153,355,680     1.508e+15   73,531,646
+
+   -> vocab 32768 silently gets +17.3% more TEXT and spends +58.5% more COMPUTE.
+      Any BPB gap it shows is a mixture of vocab effect + data effect + compute effect.
+
+==============================================================================
+2. FOLLOW-UP ARM A - BYTE-MATCHED (equal data, compute reported as covariate)
+==============================================================================
+   Fix the data budget at D = 46,036,087 bytes of ClimbMix for every arm.
+   steps = D / (bytes_per_token * 16,384)
+
+     vocab    steps        tokens          bytes        FLOPs
+      8192      704    11,534,336     46,054,891    1.116e+15
+           python -m scripts.base_train --depth=6 --head-dim=64 --window-pattern=L \
+             --max-seq-len=512 --device-batch-size=32 --total-batch-size=16384 \
+             --num-iterations=704 --eval-every=100 --eval-tokens=524288 --core-metric-every=-1 \
+             --model-tag=v8192_bytematched   # after tok_train --vocab-size=8192
+     32768      600     9,830,400     46,036,087    1.508e+15
+           python -m scripts.base_train --depth=6 --head-dim=64 --window-pattern=L \
+             --max-seq-len=512 --device-batch-size=32 --total-batch-size=16384 \
+             --num-iterations=600 --eval-every=100 --eval-tokens=524288 --core-metric-every=-1 \
+             --model-tag=v32768_bytematched   # after tok_train --vocab-size=32768
+
+==============================================================================
+3. FOLLOW-UP ARM B - isoFLOP SWEEP (the actually decisive test)
+==============================================================================
+   Byte-matching and FLOP-matching cannot both hold by tuning steps alone, so run
+   each arm at 3 step counts, plot BPB vs cumulative FLOPs, and read both arms off
+   at a COMMON FLOP budget. base_train.py already supports --target-flops directly.
+
+    FLOP budget    v8192 steps   v32768 steps      v8192 bytes   v32768 bytes
+        4.0e+15          2,524          1,592      165,117,251    122,149,083
+        8.0e+15          5,048          3,184      330,234,501    244,298,167
+        1.6e+16         10,095          6,368      660,403,584    488,596,333
+
+   e.g.  python -m scripts.base_train --depth=6 --head-dim=64 --window-pattern=L \
+           --max-seq-len=512 --device-batch-size=32 --total-batch-size=16384 \
+           --target-flops=8e15 --num-iterations=-1 --model-tag=v32768_iso8e15
+
+==============================================================================
+4. WHAT MAKES THE READOUT VALID
+==============================================================================
+   a) Metric: val BPB only. Token loss and token PPL are uninterpretable here
+      (experiment 02: they reverse the ranking). base_train already logs val/bpb.
+   b) Same held-out bytes: both arms evaluate the same val shards. --eval-tokens is
+      in TOKENS, so at equal --eval-tokens the arms score DIFFERENT amounts of text;
+      set eval_tokens_v = round(EVAL_BYTES / bytes_per_token_v) so the denominators
+      cover the same corpus. Suggested EVAL_BYTES = 2,000,000:
+        vocab 8192: --eval-tokens=491,520  (~1,962,566 bytes)
+        vocab 32768: --eval-tokens=425,984  (~1,994,897 bytes)
+   c) Noise floor first: 3 seeds of ONE arm at the pilot budget, report the
+      std of final val BPB. A vocab gap smaller than ~2 std is not a result.
+   d) Everything else frozen: same data order, same LR schedule, same seq_len,
+      same window pattern, same optimizer. Only --vocab-size differs.
+   e) Calibrate the claim: the honest conclusion is 'at d6 / this FLOP budget /
+      this corpus, vocab X wins by Y bpb (+/- noise)'. It does NOT extrapolate to
+      other depths - the vocab-dependent share of parameters shrinks as depth grows
+      (experiment 03: 85.6% of d6 params are vocab-dependent at V=32768), so a
+      large vocab is far cheaper, relatively, for a d20 model than for this one.

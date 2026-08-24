@@ -183,9 +183,12 @@ def compute_init(device_type="cuda"): # cuda|cpu|mps
     # Reproducibility
     # Note that we set the global seeds here, but most of the code uses explicit rng objects.
     # The only place where global rng might be used is nn.Module initialization of the model weights.
-    torch.manual_seed(42)
+    seed = int(os.environ.get("NANOCHAT_SEED", 42)) # default 42 preserves the historical baseline
+    if seed != 42:
+        print0(f"Using non-default seed from NANOCHAT_SEED: {seed}")
+    torch.manual_seed(seed)
     if device_type == "cuda":
-        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed(seed)
     # skipping full reproducibility for now, possibly investigate slowdown later
     # torch.use_deterministic_algorithms(True)
 
