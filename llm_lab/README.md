@@ -39,6 +39,16 @@ A notebook is intentionally not the primary runner. Hidden notebook state is con
 From the repository root:
 
 ```bash
+./entrypoint.sh course
+```
+
+This starts the course dashboard at http://127.0.0.1:8765 and opens it in your
+browser. It uses the repository's `.venv` when available. Stop it with `Ctrl+C`.
+Set `ANTHROPIC_API_KEY` before launching to enable AI grading.
+
+To run experiments from the command line:
+
+```bash
 python -m llm_lab list
 python -m llm_lab show w0-smoke
 python -m llm_lab run w0-smoke --dry-run
